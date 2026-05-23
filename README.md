@@ -8,17 +8,17 @@ Plataforma privada de productividad con IA para analizar pymes, detectar oportun
 
 ## Stack técnico
 
-| Capa | Tecnología |
-|---|---|
-| Framework | Next.js 14+ (App Router) |
-| Lenguaje | TypeScript (strict) |
-| Estilos | Tailwind CSS |
-| Componentes UI | shadcn/ui (Sprint 1) |
-| Base de datos | PostgreSQL |
-| ORM | Prisma |
-| Autenticación | Auth privada (Sprint 2) |
-| IA | Multi-modelo: OpenAI, Anthropic (Sprint 3+) |
-| Análisis web | Fetch + parsing básico → Playwright + Lighthouse (futuro) |
+| Capa | Tecnología | Versión |
+|---|---|---|
+| Framework | Next.js (App Router) | 16.2.6 |
+| Lenguaje | TypeScript (strict) | ^5 |
+| Estilos | Tailwind CSS v4 (CSS-first) | ^4 |
+| Componentes UI | shadcn/ui (manual, compatible con Tailwind v4) | — |
+| Base de datos | PostgreSQL — Neon cloud | — |
+| ORM | Prisma | ^7.8.0 |
+| Autenticación | NextAuth v5 (CredentialsProvider + JWT) | 5.0.0-beta.31 |
+| IA | Multi-modelo: Anthropic, OpenAI (Sprint 4+) | — |
+| Análisis web | Playwright + Lighthouse (Sprint 3+) | — |
 
 ---
 
@@ -26,122 +26,195 @@ Plataforma privada de productividad con IA para analizar pymes, detectar oportun
 
 - Node.js 20 LTS o superior
 - npm 10+
-- PostgreSQL (Sprint 2+)
+- Cuenta en [Neon](https://neon.tech) con un proyecto PostgreSQL activo
 
 ---
 
-## Instalación y desarrollo
+## Instalación
 
 ```bash
 # 1. Clonar el repositorio
-git clone <repo-url>
+git clone https://github.com/Misteremess/nzt-studio.git
 cd nzt-studio
 
-# 2. Instalar dependencias
+# 2. Instalar dependencias (incluye prisma generate automático)
 npm install
 
 # 3. Configurar variables de entorno
 cp .env.example .env.local
-# Editar .env.local con los valores reales
-
-# 4. Arrancar en desarrollo
-npm run dev
+# Editar .env.local — ver sección "Variables de entorno" más abajo
 ```
 
-La app estará disponible en `http://localhost:3000`.
+---
 
-### Comandos disponibles
+## Configurar la base de datos
 
 ```bash
-npm run dev        # Servidor de desarrollo
-npm run build      # Build de producción
-npm run start      # Servidor de producción
-npm run lint       # Linter
-npx tsc --noEmit   # Comprobación de tipos
+# Aplicar migraciones a Neon
+npm run db:migrate
+# Cuando pida nombre de migración, escribe algo como: "sprint_2_companies"
+
+# (Opcional) Abrir Prisma Studio para inspeccionar las tablas
+npm run db:studio
 ```
+
+---
+
+## Arrancar en desarrollo
+
+```bash
+npm run dev
+# → http://localhost:3000
+# → Redirige automáticamente a /login
+```
+
+Introduce las credenciales configuradas en `PRIVATE_ADMIN_EMAIL` y `PRIVATE_ADMIN_PASSWORD`.
+
+---
+
+## Scripts disponibles
+
+```bash
+npm run dev           # Servidor de desarrollo (puerto 3000)
+npm run build         # Build de producción
+npm run start         # Servidor de producción
+npm run lint          # ESLint
+
+npm run db:generate   # Regenera Prisma Client desde el schema
+npm run db:migrate    # Aplica migraciones pendientes a Neon
+npm run db:studio     # Abre Prisma Studio en el navegador
+npm run db:push       # Push del schema sin migración (solo exploración)
+```
+
+---
+
+## Variables de entorno
+
+Copiar `.env.example` a `.env.local` y completar todos los valores:
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Descripción | Cómo obtenerla |
+|---|---|---|
+| `DATABASE_URL` | Connection string de PostgreSQL | Neon → Connection Details → Connection string (sin pooler) |
+| `AUTH_SECRET` | Secreto para firmar sesiones JWT | `openssl rand -base64 32` |
+| `AUTH_TRUST_HOST` | Confianza en el host (necesario fuera de Vercel) | `true` |
+| `PRIVATE_ADMIN_EMAIL` | Email de acceso privado | El que decidas |
+| `PRIVATE_ADMIN_PASSWORD` | Contraseña de acceso privado | Una contraseña segura |
+
+> `.env.local` está en `.gitignore`. Nunca lo commitees.
 
 ---
 
 ## Estructura de carpetas
 
+```
 nzt-studio/
-├── app/                    # Rutas y layouts (Next.js App Router)
-│   ├── layout.tsx          # Layout raíz
-│   └── page.tsx            # Página de inicio
+├── app/                          # Next.js App Router
+│   ├── (private)/                # Rutas privadas — requieren sesión activa
+│   │   ├── layout.tsx            # Layout privado con verificación de auth
+│   │   ├── dashboard/
+│   │   ├── companies/
+│   │   ├── market-intelligence/
+│   │   ├── company-analyzer/
+│   │   ├── opportunity-engine/
+│   │   ├── mvp-factory/
+│   │   ├── pricing-studio/
+│   │   ├── proposal-builder/
+│   │   ├── delivery-workspace/
+│   │   └── knowledge-base/
+│   ├── api/auth/[...nextauth]/   # Handlers de NextAuth
+│   ├── login/                    # Página de login (pública)
+│   ├── globals.css               # Variables CSS + Tailwind v4
+│   └── layout.tsx                # Layout raíz
 │
-├── components/             # Componentes UI reutilizables y genéricos
+├── auth.config.ts                # Config Edge-compatible (proxy)
+├── auth.ts                       # Config completa con CredentialsProvider
+├── proxy.ts                      # Protección de rutas a nivel Edge (Next.js 16)
 │
-├── features/               # Módulos de negocio (un módulo por dominio)
-│   ├── companies/          # Gestión de empresas analizadas
-│   ├── analyses/           # Análisis web de empresas
-│   ├── opportunities/      # Oportunidades detectadas
-│   ├── mvp-specs/          # Especificaciones de MVPs
-│   ├── proposals/          # Propuestas comerciales y presupuestos
-│   └── ai/                 # Capa de integración con IA
+├── components/
+│   ├── auth/                     # LoginForm
+│   ├── layout/                   # AppShell, Sidebar, PrivateHeader
+│   └── ui/                       # Button, Card, Badge, Input, Label, Separator
 │
-├── lib/                    # Utilidades y helpers compartidos
-├── services/               # Integraciones con servicios externos
-├── types/                  # Tipos e interfaces globales de TypeScript
-├── config/                 # Constantes y configuración de la aplicación
-├── docs/                   # Documentación técnica interna
+├── db/
+│   └── prisma.ts                 # Singleton PrismaClient con PrismaPg adapter
 │
-├── .env.example            # Plantilla de variables de entorno
-├── .env.local              # Variables locales (no commitear)
-├── next.config.ts
-├── tailwind.config.ts
-├── tsconfig.json
-└── package.json
+├── features/                     # Módulos de negocio (scaffolded)
+│   ├── companies/
+│   ├── company-analyzer/
+│   ├── opportunity-engine/
+│   ├── mvp-factory/
+│   ├── pricing-studio/
+│   ├── proposal-builder/
+│   ├── delivery-workspace/
+│   └── knowledge-base/
+│
+├── lib/
+│   ├── utils.ts                  # cn(), formatDate(), formatCurrency()
+│   └── constants.ts              # APP_NAME, ROUTES
+│
+├── prisma/
+│   ├── schema.prisma             # 11 modelos, 9 enums
+│   └── migrations/               # Historial de migraciones SQL
+│
+├── prisma.config.ts              # Config Prisma CLI
+├── components.json               # Config shadcn/ui
+└── docs/                         # Documentación técnica interna
+```
 
 ---
 
 ## Convenciones
 
 ### TypeScript
-- Modo estricto activado (`strict: true`).
-- Sin `any`. Usar tipos explícitos o `unknown` con narrowing.
-- Sin `allowJs`. Todo el código en TypeScript.
+- Modo estricto (`strict: true`). Sin `any`.
+- Server Components por defecto. `"use client"` solo cuando haya interactividad o hooks del browser.
 
-### Componentes
-- Server Components por defecto.
-- `"use client"` solo cuando sea estrictamente necesario (interactividad, hooks del browser).
-- Componentes pequeños y con responsabilidad única.
-- Nombrar con PascalCase: `CompanyCard.tsx`.
+### Imports
+- Alias `@/` apunta a la raíz del proyecto (no existe carpeta `src/`).
+- Ejemplo: `import { prisma } from "@/db/prisma"`.
 
 ### Features
-- Cada módulo en `features/` es autónomo: contiene sus propios componentes, acciones, tipos y servicios si los necesita.
-- La lógica de negocio vive en `features/`, no en `app/` ni en componentes de UI.
+- Cada módulo en `features/` es autónomo: componentes, acciones, tipos y hooks propios.
+- La lógica de negocio vive en `features/`, no en `app/` ni en `components/`.
 
 ### Server Actions
-- Las mutaciones de datos se implementan como Server Actions.
+- Las mutaciones usan Server Actions de Next.js.
 - Validar siempre las entradas antes de persistir.
-- Nunca exponer lógica sensible en el cliente.
-
-### Variables de entorno
-- Las variables públicas (expuestas al cliente) usan el prefijo `NEXT_PUBLIC_`.
-- Las variables privadas (claves de API, base de datos) nunca llevan ese prefijo.
-- Documentar toda variable nueva en `.env.example` antes de usarla.
+- Nunca exponer lógica sensible al cliente.
 
 ### Commits
-- Formato semántico: `tipo(scope): descripción`.
-- Tipos: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`.
-- Ejemplo: `feat(NZT-14): add global types and config structure`.
+- Formato: `tipo(NZT-XX): descripción`.
+- Tipos: `feat`, `fix`, `refactor`, `docs`, `chore`.
 
-### Nomenclatura de archivos
+### Nomenclatura
 - Componentes: `PascalCase.tsx`
 - Utilidades, hooks, servicios: `camelCase.ts`
-- Rutas de Next.js: `kebab-case/` (carpetas) y `page.tsx`, `layout.tsx` (archivos reservados)
+- Rutas: `kebab-case/` + archivos reservados Next.js (`page.tsx`, `layout.tsx`)
 
 ---
 
-## Variables de entorno
+## Acceso privado
 
-Copiar `.env.example` a `.env.local` y completar los valores:
+La app redirige a `/login` automáticamente si no hay sesión.
 
-```bash
-cp .env.example .env.local
-```
+- **Sin registro público** — solo el usuario configurado en `.env.local` puede acceder.
+- **Sin roles ni multiusuario** — single admin para uso personal.
+- Tras login, la sesión dura 30 días (JWT firmado con `AUTH_SECRET`).
+- El botón "Salir" en el header cierra la sesión y redirige a `/login`.
 
-Nunca commitear `.env.local`. Está incluido en `.gitignore`.
+---
+
+## Documentación interna
+
+Documentación técnica detallada en `/docs`:
+
+- [`docs/TECHNICAL.md`](docs/TECHNICAL.md) — Documentación completa de Sprint 1: stack, arquitectura, decisiones técnicas, schema de datos, auth, historial de tareas.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Decisiones de arquitectura.
+- [`docs/MODULES.md`](docs/MODULES.md) — Descripción de módulos funcionales.
 
 ---
 
@@ -149,15 +222,7 @@ Nunca commitear `.env.local`. Está incluido en `.gitignore`.
 
 | Sprint | Objetivo | Estado |
 |---|---|---|
-| Sprint 1 | Base técnica, estructura, acceso privado, dashboard base | 🟡 En progreso |
-| Sprint 2 | Base de datos, Prisma, gestión de empresas | ⬜ Pendiente |
-| Sprint 3 | Análisis web básico, detección de oportunidades | ⬜ Pendiente |
-| Sprint 4+ | IA, MVPs, propuestas, automatización | ⬜ Pendiente |
-
----
-
-## Documentación interna
-
-La documentación técnica detallada está en `/docs`:
-
-- `docs/ARCHITECTURE.md` — Decisiones de arquitectura
+| Sprint 1 | Base técnica, UI privada, DB, schema, auth | ✅ Completado |
+| Sprint 2 | CRM privado de empresas (CRUD) | 🔜 Siguiente |
+| Sprint 3 | Análisis web básico | ⬜ Pendiente |
+| Sprint 4+ | IA, diagnóstico, oportunidades, propuestas | ⬜ Pendiente |
