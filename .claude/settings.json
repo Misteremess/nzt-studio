@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes shadcn@latest init --yes --base-color neutral)",
+      "Bash(npm --version)",
+      "Bash(npx --yes shadcn@latest init -y -d --base-color neutral)",
+      "Bash(npx --yes shadcn@latest init --help)",
+      "Bash(npx --yes shadcn@latest init -d)",
+      "Bash(npx --yes shadcn@latest add card separator avatar dropdown-menu scroll-area tooltip -y)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(git config *)"
+    ]
+  }
+}

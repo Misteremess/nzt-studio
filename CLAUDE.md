@@ -151,13 +151,41 @@ Estas reglas las debe respetar **todo el equipo** (todos los agentes ya las cono
 
 ---
 
-## 7. Memoria del proyecto
+## 7. Changelog del proyecto
+
+**Al terminar cualquier tarea que produzca cambios en el repo, añade una entrada al final de [CHANGELOG.md](CHANGELOG.md).** Esto es obligatorio — el jefe lo usa para seguir el progreso del proyecto.
+
+### Reglas
+
+- **Una entrada por prompt** del jefe que produzca cambios. Si el prompt no toca código/configuración (preguntas, debate, exploración), no se añade nada.
+- **Formato:**
+  ```markdown
+  ## <versión> (<git user.name>)
+  **<Título corto — issue NZT-xx si aplica, o tema>.** <Explicación máx. 3 líneas.>
+  ```
+- **Usuario:** el resultado de `git config user.name` (hoy: `IgnacioSanchezYuste`). Verifícalo si tienes duda.
+- **Versionado semver:**
+  - `major` (`x.0.0`) → sprint nuevo, refactor estructural, ruptura.
+  - `minor` (`1.x.0`) → issue NZT-xx completado, feature nueva.
+  - `patch` (`1.1.x`) → ajustes, fixes, polish, docs, config menor.
+- **Explicación:** máximo 3 líneas. Una frase por idea. Sin bullets largos. Sin emojis. Sin describir verificaciones obvias salvo que sea relevante (`✅ tsc + lint + build` al final si la tarea tocó código).
+- **Orden:** orden cronológico ascendente — entradas más recientes al final del archivo.
+
+### Cuándo NO actualizar
+
+- El prompt fue solo conversación, pregunta o investigación sin cambios.
+- El prompt corrigió la última entrada del CHANGELOG (entonces edita la entrada existente, no añadas una nueva).
+- El jefe pidió explícitamente "no apuntar esto en el changelog".
+
+---
+
+## 8. Memoria del proyecto
 
 Si aprendes algo importante del proyecto (decisión arquitectónica que tomó el jefe, preferencias de cómo quiere trabajar, contexto de negocio no obvio), guárdalo en tu memoria persistente siguiendo las reglas de "auto memory" del sistema. No guardes lo que ya está en este `CLAUDE.md` o en `/docs/` — eso ya se carga solo.
 
 ---
 
-## 8. Comandos útiles del proyecto
+## 9. Comandos útiles del proyecto
 
 ```bash
 npm run dev        # Dev server en http://localhost:3000
