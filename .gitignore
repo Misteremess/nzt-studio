@@ -30,10 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — commit only .env.example, never real secrets
 .env.local
 .env*.local
 .env*
+!.env.example
 
 # exact ignore entries requested
 .next/
@@ -45,3 +46,5 @@ node_modules/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prisma generated client (node_modules/.prisma/client — gitignored via node_modules rule)
