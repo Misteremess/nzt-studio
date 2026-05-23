@@ -6,12 +6,292 @@ datasource db {
   provider = "postgresql"
 }
 
-// Modelo técnico mínimo para validar la conexión y la migración inicial.
-// Los modelos de negocio reales se definen en NZT-19.
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum CompanyStatus {
+  PROSPECT      // Identificada, no analizada
+  ACTIVE        // En análisis o seguimiento activo
+  PROPOSAL_SENT // Propuesta enviada
+  CLIENT        // Cliente firmado
+  INACTIVE      // Sin actividad
+}
+
+enum OpportunityStatus {
+  DETECTED   // Detectada desde análisis
+  VALIDATED  // Confirmada como oportunidad real
+  PROPOSED   // Incluida en propuesta
+  ACCEPTED   // Cliente aceptó
+  REJECTED   // Cliente rechazó
+  CLOSED     // Cerrada por otro motivo
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PromptTemplateType {
+  ANALYSIS
+  OPPORTUNITY
+  MVP_SPEC
+  PROPOSAL
+  PRICING
+  KNOWLEDGE
+  GENERAL
+}
+
+enum AiRunType {
+  ANALYSIS
+  OPPORTUNITY_DETECTION
+  MVP_SPEC_GENERATION
+  PROPOSAL_GENERATION
+  PRICING
+  GENERAL
+}
+
+enum KnowledgeItemType {
+  TEMPLATE    // Plantillas de documentos
+  PROMPT      // Referencias de prompts
+  GUIDE       // Guías internas
+  REFERENCE   // Referencias externas
+  CASE_STUDY  // Casos de uso
+  SNIPPET     // Fragmentos de código o contenido
+}
+
+// ─── Technical ────────────────────────────────────────────────────────────────
+
+// Tabla de validación técnica creada en NZT-18. Se mantiene por historial.
 model SystemHealthCheck {
   id        String   @id @default(cuid())
   status    String
   createdAt DateTime @default(now())
 
   @@map("system_health_checks")
+}
+
+// ─── Core domain ──────────────────────────────────────────────────────────────
+
+model Company {
+  id       String        @id @default(cuid())
+  name     String
+  sector   String?
+  city     String?
+  website  String?
+  phone    String? // PII — mantener opcional, no añadir más datos personales
+  email    String? // PII — mantener opcional
+  mapsUrl  String?
+  notes    String?
+  status   CompanyStatus @default(PROSPECT)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  analyses      Analysis[]
+  opportunities Opportunity[]
+  proposals     Proposal[]
+  projects      Project[]
+
+  @@map("companies")
+}
+
+model MarketResearch {
+  id           String   @id @default(cuid())
+  sector       String
+  city         String?
+  targetTicket Int? // Ticket objetivo en EUR
+  findings     Json? // Hallazgos estructurados del mercado
+  ideas        Json? // Array de ideas detectadas
+  score        Int? // Puntuación 0-100 del atractivo del nicho
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("market_researches")
+}
+
+model Analysis {
+  id        String   @id @default(cuid())
+  companyId String
+  url       String? // URL analizada
+  rawData   Json? // Datos crudos del scraping o análisis
+  scores    Json? // Dimensiones puntuadas (SEO, UX, tech, etc.)
+  aiOutput  Json? // Insights generados por IA
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+  aiRuns        AiRun[]
+
+  @@map("analyses")
+}
+
+model Opportunity {
+  id         String            @id @default(cuid())
+  companyId  String
+  analysisId String? // Opcional: puede crearse manualmente sin análisis previo
+  title      String
+  problem    String?
+  solution   String?
+  impact     String?
+  difficulty String? // "low" | "medium" | "high" — libre para flexibilidad inicial
+  price      Decimal?          @db.Decimal(10, 2) // Precio estimado en EUR
+  priority   Int               @default(0) // 0-100
+  status     OpportunityStatus @default(DETECTED)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  analysis  Analysis? @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  mvpSpecs  MvpSpec[]
+  proposals Proposal[]
+
+  @@map("opportunities")
+}
+
+model MvpSpec {
+  id            String   @id @default(cuid())
+  opportunityId String
+  name          String
+  features      Json? // Array de features con descripción y prioridad
+  screens       Json? // Array de pantallas/vistas
+  dataSchema    Json? // Modelo de datos propuesto (renombrado de 'schema' — palabra reservada)
+  integrations  Json? // Integraciones necesarias
+  stack         Json? // Stack tecnológico recomendado
+  roadmap       Json? // Fases y milestones
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  proposals   Proposal[]
+
+  @@map("mvp_specs")
+}
+
+model Proposal {
+  id               String         @id @default(cuid())
+  companyId        String
+  opportunityId    String? // Opcional: propuesta puede no estar ligada a una oportunidad específica
+  mvpSpecId        String?
+  content          Json? // Contenido estructurado de la propuesta
+  price            Decimal?       @db.Decimal(10, 2)
+  maintenancePrice Decimal?       @db.Decimal(10, 2) // Precio mensual de mantenimiento
+  status           ProposalStatus @default(DRAFT)
+  pdfUrl           String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  mvpSpec     MvpSpec?     @relation(fields: [mvpSpecId], references: [id], onDelete: SetNull)
+  project     Project?
+
+  @@map("proposals")
+}
+
+model Project {
+  id         String        @id @default(cuid())
+  companyId  String
+  proposalId String?       @unique // Un proyecto por propuesta
+  status     ProjectStatus @default(PLANNING)
+  startDate  DateTime?
+  deadline   DateTime?
+  repoUrl    String?
+  deployUrl  String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proposal Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  tasks    Task[]
+
+  @@map("projects")
+}
+
+model Task {
+  id        String       @id @default(cuid())
+  projectId String
+  title     String
+  status    TaskStatus   @default(TODO)
+  priority  TaskPriority @default(MEDIUM)
+  dueDate   DateTime?
+  notes     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+// ─── AI & Knowledge ───────────────────────────────────────────────────────────
+
+model PromptTemplate {
+  id           String             @id @default(cuid())
+  name         String
+  type         PromptTemplateType
+  version      Int                @default(1)
+  content      String // Texto completo del prompt
+  outputSchema Json? // Esquema esperado del output (para validación)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  aiRuns AiRun[]
+
+  @@unique([name, version])
+  @@map("prompt_templates")
+}
+
+model AiRun {
+  id               String    @id @default(cuid())
+  type             AiRunType
+  model            String // e.g. "claude-sonnet-4-6", "gpt-4o"
+  promptTemplateId String? // Opcional: puede ser un prompt ad hoc
+  promptVersion    Int? // Versión del prompt usada en el momento de la ejecución
+  analysisId       String? // Opcional: futuro soporte para otros contextos (pricing, proposal...)
+  input            Json // Input enviado al modelo
+  output           Json? // Output recibido
+  cost             Decimal?  @db.Decimal(10, 6) // Coste en USD con precisión de sub-centavo
+  createdAt        DateTime  @default(now())
+
+  promptTemplate PromptTemplate? @relation(fields: [promptTemplateId], references: [id], onDelete: SetNull)
+  analysis       Analysis?       @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+
+  @@map("ai_runs")
+}
+
+model KnowledgeItem {
+  id        String            @id @default(cuid())
+  type      KnowledgeItemType
+  title     String
+  content   String
+  tags      String[] // Array nativo de PostgreSQL
+  embedding Json? // Placeholder para embeddings vectoriales (pgvector en sprint futuro)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@map("knowledge_items")
 }
