@@ -70,6 +70,10 @@ function PlaceholderCard({
   );
 }
 
+function safeHref(url: string): string | null {
+  return url.startsWith("http://") || url.startsWith("https://") ? url : null;
+}
+
 export function CompanyDetailView({ company }: CompanyDetailViewProps) {
   const hasPresencia = company.website || company.mapsUrl;
   const hasContacto = company.email || company.phone;
@@ -128,28 +132,42 @@ export function CompanyDetailView({ company }: CompanyDetailViewProps) {
               <>
                 {company.website && (
                   <FieldRow label="Website">
-                    <a
-                      href={company.website}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1.5 text-primary hover:underline break-all"
-                    >
-                      <Globe className="h-3 w-3 shrink-0" />
-                      {company.website.replace(/^https?:\/\//, "")}
-                    </a>
+                    {safeHref(company.website) ? (
+                      <a
+                        href={safeHref(company.website)!}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 text-primary hover:underline break-all"
+                      >
+                        <Globe className="h-3 w-3 shrink-0" />
+                        {company.website.replace(/^https?:\/\//, "")}
+                      </a>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Globe className="h-3 w-3 shrink-0" />
+                        {company.website}
+                      </span>
+                    )}
                   </FieldRow>
                 )}
                 {company.mapsUrl && (
                   <FieldRow label="Maps">
-                    <a
-                      href={company.mapsUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1.5 text-primary hover:underline"
-                    >
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      Ver en Google Maps
-                    </a>
+                    {safeHref(company.mapsUrl) ? (
+                      <a
+                        href={safeHref(company.mapsUrl)!}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 text-primary hover:underline"
+                      >
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        Ver en Google Maps
+                      </a>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        {company.mapsUrl}
+                      </span>
+                    )}
                   </FieldRow>
                 )}
               </>
