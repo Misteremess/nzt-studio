@@ -1,18 +1,28 @@
-// features/companies/types.ts
-// Tipos específicos del módulo Companies.
-// Los tipos de dominio compartidos viven en types/global.ts
+import type { CompanyStatus } from "@prisma/client";
 
-export type CompanyStatus = "active" | "inactive" | "prospect";
-export type CompanyPriority = "high" | "medium" | "low";
+export type { CompanyStatus };
 
-export interface Company {
+export interface CompanyListItem {
   id: string;
   name: string;
-  sector: string;
-  city: string;
-  website?: string;
+  sector: string | null;
+  city: string | null;
+  website: string | null;
   status: CompanyStatus;
-  priority: CompanyPriority;
+  createdAt: Date;
+}
+
+export interface CompanyDetail {
+  id: string;
+  name: string;
+  sector: string | null;
+  city: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  mapsUrl: string | null;
+  notes: string | null;
+  status: CompanyStatus;
   createdAt: Date;
   updatedAt: Date;
 }
