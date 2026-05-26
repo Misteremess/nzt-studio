@@ -10,6 +10,7 @@ import type { AnalyzerCategory } from "@/features/analyzer/types";
 export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   {
     label: "Panadería / Pastelería",
+    icon: "🥐",
     placeType: "bakery",
     sectorLabel: "Alimentación",
     opportunityHints: [
@@ -20,6 +21,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Barbería",
+    icon: "✂️",
     placeType: "barber_shop",
     sectorLabel: "Estética y cuidado personal",
     opportunityHints: [
@@ -30,6 +32,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Clínica dental",
+    icon: "🦷",
     placeType: "dentist",
     sectorLabel: "Salud",
     opportunityHints: [
@@ -40,6 +43,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Fisioterapia",
+    icon: "🩺",
     placeType: "physiotherapist",
     sectorLabel: "Salud",
     opportunityHints: [
@@ -50,6 +54,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Restaurante",
+    icon: "🍽️",
     placeType: "restaurant",
     sectorLabel: "Hostelería",
     opportunityHints: [
@@ -60,6 +65,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Cafetería",
+    icon: "☕",
     placeType: "cafe",
     sectorLabel: "Hostelería",
     opportunityHints: [
@@ -70,6 +76,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Taller mecánico",
+    icon: "🔧",
     placeType: "car_repair",
     sectorLabel: "Automoción",
     opportunityHints: [
@@ -80,6 +87,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Academia / Clases",
+    icon: "📚",
     placeType: "tutoring_center",
     sectorLabel: "Educación",
     opportunityHints: [
@@ -89,6 +97,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Inmobiliaria",
+    icon: "🏠",
     placeType: "real_estate_agency",
     sectorLabel: "Inmobiliaria",
     opportunityHints: [
@@ -99,6 +108,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Centro de estética",
+    icon: "💅",
     placeType: "beauty_salon",
     sectorLabel: "Estética y cuidado personal",
     opportunityHints: [
@@ -109,6 +119,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Gimnasio",
+    icon: "🏋️",
     placeType: "gym",
     sectorLabel: "Deporte y bienestar",
     opportunityHints: [
@@ -118,6 +129,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Reformas / Construcción",
+    icon: "🏗️",
     placeType: "general_contractor",
     sectorLabel: "Construcción y reformas",
     opportunityHints: [
@@ -128,6 +140,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Abogado / Gestoría",
+    icon: "⚖️",
     placeType: "lawyer",
     sectorLabel: "Servicios legales y fiscales",
     opportunityHints: [
@@ -138,6 +151,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   },
   {
     label: "Veterinario",
+    icon: "🐾",
     placeType: "veterinary_care",
     sectorLabel: "Veterinaria",
     opportunityHints: [

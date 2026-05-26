@@ -95,7 +95,8 @@ export interface DetectedOpportunity {
 
 /** Categoría de negocio disponible en el selector del Analyzer */
 export interface AnalyzerCategory {
-  label: string;              // Texto visible en el <select>
+  label: string;              // Texto visible en el dropdown
+  icon: string;               // Emoji representativo de la categoría
   placeType: string;          // Valor de includedTypes para Places API (New)
   sectorLabel: string;        // Mapea a Company.sector al guardar como candidata
   opportunityHints: string[]; // Oportunidades típicas para orientar al usuario
@@ -103,9 +104,11 @@ export interface AnalyzerCategory {
 
 /** Input del formulario de búsqueda */
 export interface AnalyzerSearchInput {
-  locationText: string;  // Texto de ubicación a geocodificar server-side
-  radiusMeters: number;  // 500 | 1000 | 2000 | 2500
-  placeType: string;     // AnalyzerCategory.placeType
+  locationText: string;                                 // Texto a geocodificar server-side
+  coordinates?: { latitude: number; longitude: number }; // Alternativa: coordenadas directas
+  radiusMeters: number;                                 // 500 | 1000 | 2000 | 2500
+  placeType: string;                                    // AnalyzerCategory.placeType
+  maxResults: number;                                   // 5 | 10 | 15 | 20
 }
 
 // ─── Cache record ─────────────────────────────────────────────────────────────

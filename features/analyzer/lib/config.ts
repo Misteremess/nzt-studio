@@ -7,28 +7,37 @@
 // It reads process.env vars that are NOT prefixed with NEXT_PUBLIC_
 // and would be undefined in the browser.
 
-/** Places API (New) hard cap for Nearby Search results */
-const PLACES_API_MAX_RESULTS = 20;
+/**
+ * Places API (New) hard cap per Nearby Search request.
+ * Each page returns at most 20 places; pagination is required for more.
+ */
+export const PLACES_API_MAX_PER_PAGE = 20;
+
+/**
+ * Self-imposed ceiling for paginated result totals.
+ * 300 results = up to 15 API calls per search — use with care.
+ */
+const PLACES_API_MAX_TOTAL = 300;
 
 /** Places API (New) absolute max radius in meters */
 const PLACES_API_MAX_RADIUS = 50_000;
 
 export const ANALYZER_CONFIG = {
   /**
-   * Maximum number of places returned per Nearby Search request.
-   * Capped at 20 (Places API hard limit).
+   * Maximum total places returned across all pages of a single search.
+   * Default: 300. Override via ANALYZER_MAX_RESULTS env var (max 300).
    */
   maxResults: Math.min(
-    parseInt(process.env.ANALYZER_MAX_RESULTS ?? "20", 10) || 20,
-    PLACES_API_MAX_RESULTS
+    parseInt(process.env.ANALYZER_MAX_RESULTS ?? "300", 10) || 300,
+    PLACES_API_MAX_TOTAL
   ),
 
   /**
    * Maximum search radius in meters.
-   * Default: 2500 m. Increase via env var if needed (up to 50 km).
+   * Default: 10 000 m (10 km). Override via ANALYZER_MAX_RADIUS_METERS.
    */
   maxRadiusMeters: Math.min(
-    parseInt(process.env.ANALYZER_MAX_RADIUS_METERS ?? "2500", 10) || 2500,
+    parseInt(process.env.ANALYZER_MAX_RADIUS_METERS ?? "10000", 10) || 10000,
     PLACES_API_MAX_RADIUS
   ),
 
@@ -42,10 +51,12 @@ export const ANALYZER_CONFIG = {
 
 /** Allowed radius values exposed in the UI select */
 export const ANALYZER_RADIUS_OPTIONS = [
-  { label: "500 m", value: 500 },
-  { label: "1 km", value: 1000 },
-  { label: "2 km", value: 2000 },
+  { label: "500 m",  value: 500 },
+  { label: "1 km",   value: 1000 },
+  { label: "2 km",   value: 2000 },
   { label: "2,5 km", value: 2500 },
+  { label: "5 km",   value: 5000 },
+  { label: "10 km",  value: 10000 },
 ] as const;
 
 export type AnalyzerRadiusValue =

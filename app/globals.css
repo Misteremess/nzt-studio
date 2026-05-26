@@ -63,3 +63,10 @@ body {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
+
+/* Leaflet: Tailwind preflight resets img{max-width:100%} which collapses tile images
+   (tiles are <img> inside abs-positioned containers → computed width becomes 0). */
+.leaflet-container img {
+  max-width: none;
+  box-sizing: content-box;
+}

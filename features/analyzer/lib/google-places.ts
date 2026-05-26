@@ -5,7 +5,7 @@
 // server-only modules. The API key is never exposed to the browser.
 import "server-only";
 
-import { requirePlacesApiKey, ANALYZER_CONFIG } from "@/features/analyzer/lib/config";
+import { requirePlacesApiKey, ANALYZER_CONFIG, PLACES_API_MAX_PER_PAGE } from "@/features/analyzer/lib/config";
 import type { PlaceLocation, PlaceSummary, PlaceDetail, PlaceBusinessStatus } from "@/features/analyzer/types";
 
 // ─── API constants ─────────────────────────────────────────────────────────────
@@ -80,6 +80,8 @@ interface RawPlace {
 
 interface RawNearbySearchResponse {
   places?: RawPlace[];
+  /** Present when more pages are available. Pass as `pageToken` in the next request. */
+  nextPageToken?: string;
 }
 
 interface RawGeocodingResult {
@@ -311,11 +313,15 @@ export interface NearbySearchResult {
 
 /**
  * Searches for businesses near a location using Google Places Nearby Search (New).
+ * Paginates automatically until `maxResults` are collected or the API has no more pages.
+ *
+ * Each page fetches up to 20 results (Places API hard limit).
+ * Requesting >20 results will therefore generate multiple API calls.
  *
  * @param center       - Center of the search circle (lat/lng)
  * @param radiusMeters - Search radius in meters (capped by ANALYZER_CONFIG.maxRadiusMeters)
  * @param placeType    - Google Places includedTypes value (e.g. "bakery")
- * @param maxResults   - Max results (capped at 20 by Places API)
+ * @param maxResults   - Total results wanted (capped by ANALYZER_CONFIG.maxResults)
  *
  * @throws PlacesApiError on any failure
  */
@@ -326,55 +332,70 @@ export async function searchNearby(
   maxResults = ANALYZER_CONFIG.maxResults
 ): Promise<NearbySearchResult> {
   const key = requirePlacesApiKey();
+  const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
+  const totalWanted = Math.min(maxResults, ANALYZER_CONFIG.maxResults);
 
-  const body = {
-    locationRestriction: {
-      circle: {
-        center: { latitude: center.latitude, longitude: center.longitude },
-        radius: Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters),
+  const allPlaces: PlaceSummary[] = [];
+  const allRaw: RawPlace[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const pageSize = Math.min(PLACES_API_MAX_PER_PAGE, totalWanted - allPlaces.length);
+
+    const body: Record<string, unknown> = {
+      locationRestriction: {
+        circle: {
+          center: { latitude: center.latitude, longitude: center.longitude },
+          radius: cappedRadius,
+        },
       },
-    },
-    includedTypes: [placeType],
-    maxResultCount: Math.min(maxResults, 20),
-    languageCode: "es",
-  };
+      includedTypes: [placeType],
+      maxResultCount: pageSize,
+      languageCode: "es",
+    };
 
-  let response: Response;
-  try {
-    response = await fetch(`${PLACES_BASE}/places:searchNearby`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": key,
-        "X-Goog-FieldMask": NEARBY_FIELD_MASK,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
-  } catch (err) {
-    throw new PlacesApiError(
-      `Nearby search network error: ${err}`,
-      "NETWORK_ERROR",
-      "Error de conexión. Comprueba tu red e inténtalo de nuevo."
-    );
-  }
+    if (pageToken) body.pageToken = pageToken;
 
-  if (!response.ok) {
-    await handlePlacesHttpError(response);
-  }
+    let response: Response;
+    try {
+      response = await fetch(`${PLACES_BASE}/places:searchNearby`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": key,
+          "X-Goog-FieldMask": NEARBY_FIELD_MASK,
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      });
+    } catch (err) {
+      throw new PlacesApiError(
+        `Nearby search network error: ${err}`,
+        "NETWORK_ERROR",
+        "Error de conexión. Comprueba tu red e inténtalo de nuevo."
+      );
+    }
 
-  const data = (await response.json()) as RawNearbySearchResponse;
-  const rawPlaces = data.places ?? [];
+    if (!response.ok) {
+      await handlePlacesHttpError(response);
+    }
 
-  if (rawPlaces.length === 0) {
-    return { places: [], rawPlaces: [] };
-  }
+    const data = (await response.json()) as RawNearbySearchResponse;
+    const rawPage = data.places ?? [];
 
-  // Filter out any malformed entries (missing id or location)
-  const validRaw = rawPlaces.filter((p) => p.id && p.location);
-  const places = validRaw.map(toPlaceSummary);
+    // Filter out malformed entries and accumulate
+    const validPage = rawPage.filter((p) => p.id && p.location);
+    allPlaces.push(...validPage.map(toPlaceSummary));
+    allRaw.push(...validPage);
 
-  return { places, rawPlaces: validRaw };
+    pageToken = data.nextPageToken;
+
+    // Stop early if API returned fewer results than the page cap (no more available)
+    if (rawPage.length < pageSize) break;
+
+  } while (pageToken && allPlaces.length < totalWanted);
+
+  return { places: allPlaces, rawPlaces: allRaw };
 }
 
 // ─── Place Details ────────────────────────────────────────────────────────────

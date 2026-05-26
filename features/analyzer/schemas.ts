@@ -15,33 +15,49 @@ const VALID_PLACE_TYPES = ANALYZER_CATEGORIES.map((c) => c.placeType);
 
 /**
  * Input schema for searchPlacesAction.
- * Validated server-side before calling the Places API.
+ * Accepts either a text location (geocoded server-side) or explicit coordinates
+ * (e.g. from a map click). At least one must be provided.
  */
-export const searchInputSchema = z.object({
-  /** Location to search around. Geocoded server-side to lat/lng. */
-  locationText: z
-    .string()
-    .min(1, "Introduce una ubicación (ej. 'Madrid' o 'Calle Mayor, Barcelona')"),
+export const searchInputSchema = z
+  .object({
+    /** Free-text location geocoded server-side. Can be empty when coordinates are set. */
+    locationText: z.string(),
 
-  /**
-   * Search radius in meters. Must be one of the allowed values.
-   * Max enforced server-side by ANALYZER_CONFIG.maxRadiusMeters.
-   */
-  radiusMeters: z
-    .number()
-    .int("El radio debe ser un número entero")
-    .min(100, "El radio mínimo es 100 metros")
-    .max(2500, "El radio máximo es 2.500 metros"),
+    /** Explicit lat/lng from a map click — skips geocoding when present. */
+    coordinates: z
+      .object({ latitude: z.number(), longitude: z.number() })
+      .optional(),
 
-  /** Google Places includedTypes value. Must be a known category. */
-  placeType: z
-    .string()
-    .min(1, "Selecciona una categoría de negocio")
-    .refine(
-      (v) => VALID_PLACE_TYPES.includes(v),
-      { message: "Categoría de negocio no válida" }
-    ),
-});
+    /**
+     * Search radius in meters.
+     * Max enforced server-side by ANALYZER_CONFIG.maxRadiusMeters.
+     */
+    radiusMeters: z
+      .number()
+      .int("El radio debe ser un número entero")
+      .min(100, "El radio mínimo es 100 metros")
+      .max(10000, "El radio máximo es 10 km"),
+
+    /** Google Places includedTypes value. Must be a known category. */
+    placeType: z
+      .string()
+      .min(1, "Selecciona una categoría de negocio")
+      .refine((v) => VALID_PLACE_TYPES.includes(v), {
+        message: "Categoría de negocio no válida",
+      }),
+
+    /** How many results to request (1–300). Capped server-side by ANALYZER_CONFIG. */
+    maxResults: z.number().int().min(1).max(300),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.locationText?.trim() && !data.coordinates) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Introduce una ubicación o selecciona un punto en el mapa",
+        path: ["locationText"],
+      });
+    }
+  });
 
 export type SearchInput = z.infer<typeof searchInputSchema>;
 

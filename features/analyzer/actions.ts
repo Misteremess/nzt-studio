@@ -17,11 +17,15 @@ import {
   upsertPlaceSummaries,
   upsertPlaceDetail,
   updateCacheSignals,
+  linkPlaceCacheToCompany,
   type PlaceCacheRow,
 } from "@/features/analyzer/lib/place-cache";
 import { isCacheValid, ANALYZER_CONFIG } from "@/features/analyzer/lib/config";
 import { computeSignalsAndOpportunities } from "@/features/analyzer/lib/opportunity-rules";
 import { searchInputSchema, fetchDetailInputSchema } from "@/features/analyzer/schemas";
+import { getSectorLabel } from "@/features/analyzer/lib/categories";
+import { prisma } from "@/db/prisma";
+import { revalidatePath } from "next/cache";
 import type {
   PlaceSummary,
   PlaceDetail,
@@ -74,15 +78,20 @@ export async function searchPlacesAction(
     return { ok: false, error: firstError, errorCode: "INVALID_INPUT" };
   }
 
-  const { locationText, radiusMeters, placeType } = parsed.data;
+  const { locationText, radiusMeters, placeType, maxResults, coordinates } = parsed.data;
   const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
+  const cappedResults = Math.min(maxResults, ANALYZER_CONFIG.maxResults);
 
-  // 2. Geocode location text
+  // 2. Resolve center — use explicit coordinates (map click) or geocode text
   let center: PlaceLocation;
-  try {
-    center = await geocodeLocation(locationText);
-  } catch (err) {
-    return placesErrorResult(err);
+  if (coordinates) {
+    center = coordinates;
+  } else {
+    try {
+      center = await geocodeLocation(locationText);
+    } catch (err) {
+      return placesErrorResult(err);
+    }
   }
 
   // 3. Search nearby
@@ -92,7 +101,7 @@ export async function searchPlacesAction(
       center,
       cappedRadius,
       placeType,
-      ANALYZER_CONFIG.maxResults
+      cappedResults
     );
   } catch (err) {
     return placesErrorResult(err);
@@ -201,6 +210,104 @@ export async function fetchPlaceDetailAction(
       companyId: cached?.companyId ?? null,
     },
   };
+}
+
+// ─── Save as Company action ────────────────────────────────────────────────────
+
+export interface SaveAsCompanyData {
+  companyId: string;
+  /** True if the company already existed (placeId already linked) */
+  alreadyExisted: boolean;
+}
+
+/**
+ * Saves a discovered business as a Company candidate in the CRM.
+ * Always manual — never called automatically.
+ *
+ * Flow:
+ *   1. Load PlaceCache row for placeId
+ *   2. If already linked to a Company, return it (idempotent)
+ *   3. Map place data → Company fields
+ *   4. Create Company with status PROSPECT
+ *   5. Link PlaceCache → Company
+ *   6. Revalidate /companies cache
+ */
+export async function saveAsCompanyAction(
+  placeId: string
+): Promise<ActionResult<SaveAsCompanyData>> {
+  let cached: PlaceCacheRow | null;
+  try {
+    cached = await getPlaceCacheByPlaceId(placeId);
+  } catch {
+    return { ok: false, error: "Error al acceder a la caché.", errorCode: "DB_ERROR" };
+  }
+
+  if (!cached) {
+    return {
+      ok: false,
+      error: "Negocio no encontrado en caché. Carga el detalle antes de guardar.",
+      errorCode: "NOT_FOUND",
+    };
+  }
+
+  // Idempotent: already linked to a Company
+  if (cached.companyId) {
+    return { ok: true, data: { companyId: cached.companyId, alreadyExisted: true } };
+  }
+
+  const phone = cached.nationalPhone ?? cached.internationalPhone;
+  const sector = getSectorLabel(cached.primaryType ?? "");
+  const opportunities = parseCachedJson<DetectedOpportunity[]>(cached.opportunities) ?? [];
+
+  // Build notes from available data
+  const noteLines: string[] = [
+    "Descubierta via Google Places Analyzer.",
+    "Fuente: Google Places API (New)",
+    `Place ID: ${cached.placeId}`,
+  ];
+  if (cached.formattedAddress) noteLines.push(`Dirección: ${cached.formattedAddress}`);
+  if (cached.rating !== null)
+    noteLines.push(`Rating: ${cached.rating} (${cached.userRatingCount ?? 0} reseñas)`);
+  if (cached.businessStatus) noteLines.push(`Estado: ${cached.businessStatus}`);
+  if (opportunities.length > 0) {
+    noteLines.push("\nOportunidades detectadas:");
+    opportunities.forEach((o) => noteLines.push(`- ${o.title}`));
+  }
+  noteLines.push(`\nGuardada el ${new Date().toLocaleDateString("es-ES")}.`);
+
+  let companyId: string;
+  try {
+    const company = await prisma.company.create({
+      data: {
+        name: cached.name,
+        sector: sector || null,
+        website: cached.websiteUri,
+        phone: phone ?? null,
+        mapsUrl: cached.googleMapsUri,
+        notes: noteLines.join("\n"),
+        status: "PROSPECT",
+      },
+      select: { id: true },
+    });
+    companyId = company.id;
+  } catch {
+    return {
+      ok: false,
+      error: "Error al guardar la empresa. Inténtalo de nuevo.",
+      errorCode: "DB_ERROR",
+    };
+  }
+
+  try {
+    await linkPlaceCacheToCompany(placeId, companyId);
+  } catch {
+    // Non-blocking: company was created, only the link failed
+    console.error("[Analyzer] Failed to link PlaceCache to Company", placeId, companyId);
+  }
+
+  revalidatePath("/companies");
+
+  return { ok: true, data: { companyId, alreadyExisted: false } };
 }
 
 // ─── Internal helpers ──────────────────────────────────────────────────────────
