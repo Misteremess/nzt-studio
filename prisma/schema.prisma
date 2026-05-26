@@ -114,6 +114,7 @@ model Company {
   opportunities Opportunity[]
   proposals     Proposal[]
   projects      Project[]
+  placeCache    PlaceCache?   // Populated if this Company was discovered via the Analyzer
 
   @@map("companies")
 }
@@ -294,4 +295,64 @@ model KnowledgeItem {
   updatedAt DateTime          @updatedAt
 
   @@map("knowledge_items")
+}
+
+// ─── Analyzer ─────────────────────────────────────────────────────────────────
+
+// Cache de negocios descubiertos via Google Places API (New).
+// Fuente: Local Business Analyzer — Sprint 3 (NZT-76+).
+// Los datos de búsqueda se guardan al hacer Nearby Search.
+// Los datos de detalle se guardan bajo demanda al abrir un negocio.
+// Nunca se guarda automáticamente como Company — solo por acción manual del usuario.
+model PlaceCache {
+  id String @id @default(cuid())
+
+  // ── Identificador de fuente ────────────────────────────────────────────────
+  placeId String @unique          // Google Places ID. Inmutable para un lugar dado.
+  source  String @default("google_places")
+
+  // ── Datos de búsqueda (disponibles desde Nearby Search) ───────────────────
+  name             String
+  formattedAddress String?
+  latitude         Float
+  longitude        Float
+  types            String[]  // ["dentist", "health", "point_of_interest", ...]
+  primaryType      String?   // Tipo principal del negocio
+  businessStatus   String?   // "OPERATIONAL" | "CLOSED_TEMPORARILY" | "CLOSED_PERMANENTLY"
+  rating           Float?    // 1.0–5.0
+  userRatingCount  Int?      // Número total de reseñas
+
+  // ── Datos de detalle (Place Details, cargados bajo demanda) ───────────────
+  websiteUri               String?
+  nationalPhone            String?
+  internationalPhone       String?
+  googleMapsUri            String?
+  hasOpeningHours          Boolean  @default(false)
+  openingHoursDescriptions String[] // ["Lunes: 9:00–20:00", ...]
+
+  // ── Señales y oportunidades computadas ────────────────────────────────────
+  signals       Json? // PlaceSignals — calculado al cargar detalle
+  opportunities Json? // DetectedOpportunity[] — calculado al cargar detalle
+
+  // ── Respuestas crudas de la API ────────────────────────────────────────────
+  rawSearch Json? // Objeto completo recibido de Nearby Search para este place
+  rawDetail Json? // Objeto completo recibido de Place Details
+
+  // ── Control de cache ───────────────────────────────────────────────────────
+  searchFetchedAt DateTime  @default(now()) // Cuándo se guardó el resultado de búsqueda
+  detailFetchedAt DateTime?                 // Cuándo se cargó el detalle (null = no cargado aún)
+
+  // ── Vínculo con CRM (opcional) ────────────────────────────────────────────
+  // Null mientras no se guarde como Company candidata.
+  // @unique garantiza: un lugar descubierto → máximo una Company en el CRM.
+  // onDelete: SetNull — si la Company se elimina, el cache persiste sin vínculo.
+  companyId String?  @unique
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([latitude, longitude])
+  @@index([searchFetchedAt])
+  @@map("place_cache")
 }

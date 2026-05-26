@@ -27,7 +27,7 @@ const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Companies", href: "/companies", icon: Building2 },
   { label: "Market Intelligence", href: "/market-intelligence", icon: TrendingUp },
-  { label: "Company Analyzer", href: "/company-analyzer", icon: ScanSearch },
+  { label: "Analyzer", href: "/analyzer", icon: ScanSearch },
   { label: "Opportunity Engine", href: "/opportunity-engine", icon: Zap },
   { label: "MVP Factory", href: "/mvp-factory", icon: Code2 },
   { label: "Pricing Studio", href: "/pricing-studio", icon: Calculator },
