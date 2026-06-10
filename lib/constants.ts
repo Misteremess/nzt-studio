@@ -9,6 +9,7 @@ export const ROUTES = {
   dashboard: "/dashboard",
   companies: "/companies",
   marketIntelligence: "/market-intelligence",
+  rastreador: "/rastreador",
   analyzer: "/analyzer",
   opportunityEngine: "/opportunity-engine",
   mvpFactory: "/mvp-factory",

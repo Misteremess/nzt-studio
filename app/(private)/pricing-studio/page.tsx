@@ -1,9 +1,15 @@
 // app/(private)/pricing-studio/page.tsx
-export default function PricingStudioPage() {
+// Pricing Studio — turns MVP specs from the MVP Factory into sellable prices.
+
+import { listPricingBusinesses } from "@/features/pricing-studio/lib/store";
+import { PricingStudioView } from "@/features/pricing-studio/components/pricing-studio-view";
+
+export default async function PricingStudioPage() {
+  const businesses = await listPricingBusinesses();
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-zinc-100">Pricing Studio</h1>
-      <p className="text-zinc-400 mt-2">Módulo en construcción.</p>
+    <div className="mx-auto h-full w-full max-w-5xl">
+      <PricingStudioView initialBusinesses={businesses} />
     </div>
   );
 }

@@ -1,162 +1,79 @@
 // features/analyzer/types.ts
-// TypeScript types for the Local Business Analyzer module (Sprint 3).
-// These types describe the Google Places API responses, computed signals,
-// opportunity rules output, and UI state machine.
+// Types for the AI Business Analyzer module.
+// This module takes a business discovered via the Rastreador (Google Places)
+// and asks Claude — with live web research — to analyze it: what the business
+// already has, plus concrete growth opportunities to feed the MVP Factory.
 
-// ─── Base ─────────────────────────────────────────────────────────────────────
+export type OppLevel = "low" | "medium" | "high";
 
-export interface PlaceLocation {
-  latitude: number;
-  longitude: number;
+export interface WebSource {
+  title: string;
+  url: string;
 }
 
-export type PlaceBusinessStatus =
-  | "OPERATIONAL"
-  | "CLOSED_TEMPORARILY"
-  | "CLOSED_PERMANENTLY"
-  | "UNKNOWN";
-
-// ─── API response shapes ──────────────────────────────────────────────────────
-
-/** Datos mínimos disponibles desde Nearby Search (sin llamada adicional) */
-export interface PlaceSummary {
-  placeId: string;
-  name: string;
-  formattedAddress: string | null;
-  location: PlaceLocation;
-  types: string[];
-  primaryType: string | null;
-  businessStatus: PlaceBusinessStatus;
-  rating: number | null;
-  userRatingCount: number | null;
-}
-
-/** Datos completos tras Place Details (cargados bajo demanda) */
-export interface PlaceDetail extends PlaceSummary {
-  websiteUri: string | null;
-  nationalPhone: string | null;
-  internationalPhone: string | null;
-  googleMapsUri: string | null;
-  hasOpeningHours: boolean;
-  openingHoursDescriptions: string[];
-}
-
-// ─── Signals ──────────────────────────────────────────────────────────────────
-
-/**
- * Señales digitales calculadas a partir de datos de Place Details.
- * Ninguna señal requiere acceso al contenido de la web del negocio.
- * Si un dato no está disponible en Places, la señal derivada es false.
- */
-export interface PlaceSignals {
-  // Datos directos normalizados
-  hasWebsite: boolean;
-  hasPhone: boolean;
-  hasGoogleMapsUri: boolean;
-  hasAddress: boolean;
-  hasRating: boolean;
-  reviewCount: number;
-  hasOpeningHours: boolean;
-  businessStatus: PlaceBusinessStatus;
-  primaryType: string | null;
-
-  // Señales derivadas — no se inventan datos
-  missingWebsite: boolean;              // !hasWebsite
-  missingPhone: boolean;                // !hasPhone
-  highReputation: boolean;              // rating >= 4.2 && reviewCount >= 20
-  highReputationNoWebsite: boolean;     // highReputation && !hasWebsite
-  lowReviewCount: boolean;              // hasRating && reviewCount < 10
-  localBusinessWithDigitalGap: boolean; // !hasWebsite && hasPhone
-  closedOrTemporary: boolean;           // businessStatus !== "OPERATIONAL"
-}
-
-// ─── Opportunity rules ────────────────────────────────────────────────────────
-
-export type OpportunityPriority = "low" | "medium" | "high";
-export type OpportunityValue = "low" | "medium" | "high";
-export type OpportunityConfidence = "low" | "medium" | "high";
-
-/**
- * Oportunidad detectada por el motor de reglas determinista.
- * Sin IA. Cada oportunidad explica de qué señal sale.
- */
-export interface DetectedOpportunity {
+/** A single opportunity proposed by the AI. */
+export interface AiOpportunityData {
   id: string;
   title: string;
-  reason: string;            // Explicación con datos concretos del negocio
-  suggestedMvp: string;
-  priority: OpportunityPriority;
-  estimatedValue: OpportunityValue;
-  confidence: OpportunityConfidence;
-  sourceSignals: string[];   // IDs de señales que activaron la regla
+  description: string; // Qué es la oportunidad
+  development: string; // "Qué podríamos hacer" — desarrollo concreto
+  impact: OppLevel | null;
+  effort: OppLevel | null;
+  selected: boolean; // Marcada para pasar al MVP Factory
 }
 
-// ─── Analyzer config ──────────────────────────────────────────────────────────
-
-/** Categoría de negocio disponible en el selector del Analyzer */
-export interface AnalyzerCategory {
-  label: string;              // Texto visible en el dropdown
-  icon: string;               // Emoji representativo de la categoría
-  placeType: string;          // Valor de includedTypes para Places API (New)
-  sectorLabel: string;        // Mapea a Company.sector al guardar como candidata
-  opportunityHints: string[]; // Oportunidades típicas para orientar al usuario
-}
-
-/** Input del formulario de búsqueda */
-export interface AnalyzerSearchInput {
-  locationText: string;                                 // Texto a geocodificar server-side
-  coordinates?: { latitude: number; longitude: number }; // Alternativa: coordenadas directas
-  radiusMeters: number;                                 // 500 | 1000 | 2000 | 2500
-  placeType: string;                                    // AnalyzerCategory.placeType
-  maxResults: number;                                   // 5 | 10 | 15 | 20
-}
-
-// ─── Cache record ─────────────────────────────────────────────────────────────
-
-/**
- * Representa una fila de PlaceCache tal como se recupera de la BD.
- * Los campos signals y opportunities se almacenan como Json en Prisma
- * y se parsean a sus tipos TypeScript en la capa de datos (NZT-79).
- */
-export interface PlaceCacheRecord {
+/** The full AI analysis of a business. */
+export interface BusinessAnalysisData {
   id: string;
   placeId: string;
-  source: string;
+  businessName: string;
+  model: string;
+  summary: string;
+  assets: string[]; // Lo que el negocio ya tiene
+  webFindings: { text: string; sources: WebSource[] };
+  opportunities: AiOpportunityData[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Compact analysis summary for the Analyzer landing listing. */
+export interface AnalysisListItem {
+  placeId: string;
+  businessName: string;
+  summary: string;
+  opportunityCount: number;
+  selectedCount: number;
+  updatedAt: string;
+  archivedAt: string | null;
+}
+
+/** Raw, parsed shape returned by the Claude call (before persistence). */
+export interface AiAnalysisOutput {
+  summary: string;
+  assets: string[];
+  webFindings: { text: string; sources: WebSource[] };
+  opportunities: Array<{
+    title: string;
+    description: string;
+    development: string;
+    impact: OppLevel | null;
+    effort: OppLevel | null;
+  }>;
+}
+
+/** Minimal business context handed to the AI, sourced from PlaceCache. */
+export interface BusinessContext {
+  placeId: string;
   name: string;
   formattedAddress: string | null;
-  latitude: number;
-  longitude: number;
-  types: string[];
   primaryType: string | null;
+  types: string[];
   businessStatus: string | null;
   rating: number | null;
   userRatingCount: number | null;
   websiteUri: string | null;
   nationalPhone: string | null;
-  internationalPhone: string | null;
   googleMapsUri: string | null;
   hasOpeningHours: boolean;
   openingHoursDescriptions: string[];
-  signals: PlaceSignals | null;
-  opportunities: DetectedOpportunity[] | null;
-  searchFetchedAt: Date;
-  detailFetchedAt: Date | null;
-  companyId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
 }
-
-// ─── UI state machine ─────────────────────────────────────────────────────────
-
-export type AnalyzerUIState =
-  | "idle"           // Sin búsqueda activa. Formulario visible.
-  | "searching"      // Llamada a Nearby Search en curso.
-  | "results"        // Resultados de búsqueda disponibles.
-  | "no_results"     // Búsqueda completada, cero resultados.
-  | "error_search"   // Error en la búsqueda (API, red, cuota).
-  | "loading_detail" // Cargando detalle de un negocio seleccionado.
-  | "detail_loaded"  // Detalle cargado. Panel visible con señales y oportunidades.
-  | "error_detail"   // Error al cargar el detalle.
-  | "saving"         // Guardando como Company candidata.
-  | "saved"          // Guardado correctamente. Link a /companies/[id].
-  | "already_saved"; // Ya existe como Company candidata en el CRM.

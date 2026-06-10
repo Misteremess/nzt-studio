@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, KanbanSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getCompanies, getFilterOptions } from "@/features/companies/data";
+import { getCompanies, getCompanyStats, getFilterOptions } from "@/features/companies/data";
 import { CompaniesView } from "@/features/companies/components/companies-view";
+import { CompaniesStats } from "@/features/companies/components/companies-stats";
 import { ALL_STATUSES } from "@/features/companies/lib/status";
 import type { CompanyStatus } from "@/features/companies/types";
 
@@ -30,9 +31,10 @@ export default async function CompaniesPage({
   const page = Math.max(1, parseInt(raw.page ?? "1", 10) || 1);
   const hasFilters = !!(q || status || sector || city);
 
-  const [result, filterOptions] = await Promise.all([
+  const [result, filterOptions, stats] = await Promise.all([
     getCompanies({ q, status, sector, city }, page),
     getFilterOptions(),
+    getCompanyStats(),
   ]);
 
   const params: Record<string, string | undefined> = {
@@ -43,7 +45,7 @@ export default async function CompaniesPage({
   };
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="mx-auto w-full max-w-7xl space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Companies</h1>
@@ -51,13 +53,23 @@ export default async function CompaniesPage({
             Empresas candidatas para proyectos web y software.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/companies/new">
-            <Plus />
-            Nueva empresa
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/companies/pipeline">
+              <KanbanSquare />
+              Pipeline
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/companies/new">
+              <Plus />
+              Nueva empresa
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      <CompaniesStats stats={stats} activeStatus={status} />
 
       <CompaniesView
         companies={result.companies}

@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
   TrendingUp,
+  Radar,
   ScanSearch,
   Zap,
   Code2,
@@ -14,78 +14,43 @@ import {
   Briefcase,
   BookOpen,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { LucideIcon } from "lucide-react";
 
-interface NavItem {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-}
+import { FloatingDock, type DockItem } from "@/components/ui/floating-dock";
+import { LogoMark } from "@/components/brand/logo-mark";
 
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Companies", href: "/companies", icon: Building2 },
-  { label: "Market Intelligence", href: "/market-intelligence", icon: TrendingUp },
-  { label: "Analyzer", href: "/analyzer", icon: ScanSearch },
-  { label: "Opportunity Engine", href: "/opportunity-engine", icon: Zap },
-  { label: "MVP Factory", href: "/mvp-factory", icon: Code2 },
-  { label: "Pricing Studio", href: "/pricing-studio", icon: Calculator },
-  { label: "Proposal Builder", href: "/proposal-builder", icon: FileText },
-  { label: "Delivery Workspace", href: "/delivery-workspace", icon: Briefcase },
-  { label: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
+const navItems: DockItem[] = [
+  { title: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="h-full w-full" /> },
+  { title: "Companies", href: "/companies", icon: <Building2 className="h-full w-full" /> },
+  { title: "Market Intelligence", href: "/market-intelligence", icon: <TrendingUp className="h-full w-full" /> },
+  { title: "Rastreador", href: "/rastreador", icon: <Radar className="h-full w-full" /> },
+  { title: "Analyzer", href: "/analyzer", icon: <ScanSearch className="h-full w-full" /> },
+  { title: "Opportunity Engine", href: "/opportunity-engine", icon: <Zap className="h-full w-full" /> },
+  { title: "MVP Factory", href: "/mvp-factory", icon: <Code2 className="h-full w-full" /> },
+  { title: "Pricing Studio", href: "/pricing-studio", icon: <Calculator className="h-full w-full" /> },
+  { title: "Proposal Builder", href: "/proposal-builder", icon: <FileText className="h-full w-full" /> },
+  { title: "Delivery Workspace", href: "/delivery-workspace", icon: <Briefcase className="h-full w-full" /> },
+  { title: "Knowledge Base", href: "/knowledge-base", icon: <BookOpen className="h-full w-full" /> },
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
-
+  // z-50 keeps the hover labels (which overflow into the content area) above
+  // the Leaflet map's internal stacking context.
   return (
-    <aside className="flex w-56 flex-shrink-0 flex-col border-r border-border bg-card">
-      <div className="flex h-14 items-center border-b border-border px-4">
-        <div>
-          <p className="text-sm font-semibold text-foreground tracking-tight">
-            NZT Studio
-          </p>
-          <p className="text-[10px] leading-tight text-muted-foreground">
-            Private AI Venture Studio
-          </p>
-        </div>
-      </div>
+    <aside className="relative z-50 flex w-20 flex-shrink-0 flex-col items-center border-r border-border bg-card py-3 print:hidden">
+      <Link
+        href="/dashboard"
+        className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-primary/5 text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
+        title="NZT Studio"
+      >
+        <LogoMark className="h-5 w-5" />
+      </Link>
 
-      <nav className="flex-1 overflow-y-auto py-3">
-        <ul className="space-y-0.5 px-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              pathname.startsWith(item.href + "/");
+      <FloatingDock items={navItems} className="flex-1" />
 
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-                    isActive
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  )}
-                >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-          <span className="text-xs text-muted-foreground">System active</span>
-        </div>
-      </div>
+      <div
+        className="mt-2 h-2 w-2 rounded-full bg-emerald-400"
+        title="System active"
+      />
     </aside>
   );
 }

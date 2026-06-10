@@ -1,9 +1,16 @@
 // app/(private)/delivery-workspace/page.tsx
-export default function DeliveryWorkspacePage() {
+// Delivery Workspace — post-sale tracking of the MVPs NZT Studio decides to
+// build and ship. Status lifecycle, checklist, repo/deploy links and notes.
+
+import { getDeliveryBoard } from "@/features/delivery-workspace/lib/store";
+import { DeliveryWorkspaceView } from "@/features/delivery-workspace/components/delivery-workspace-view";
+
+export default async function DeliveryWorkspacePage() {
+  const data = await getDeliveryBoard();
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-zinc-100">Delivery Workspace</h1>
-      <p className="text-zinc-400 mt-2">Módulo en construcción.</p>
+    <div className="mx-auto h-full w-full max-w-7xl">
+      <DeliveryWorkspaceView initialData={data} />
     </div>
   );
 }

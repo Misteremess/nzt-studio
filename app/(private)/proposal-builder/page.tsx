@@ -1,9 +1,16 @@
 // app/(private)/proposal-builder/page.tsx
-export default function ProposalBuilderPage() {
+// Proposal Builder — turns MVP specs (and their pricing) into client-ready
+// commercial proposals.
+
+import { listProposalBusinesses } from "@/features/proposal-builder/lib/store";
+import { ProposalBuilderView } from "@/features/proposal-builder/components/proposal-builder-view";
+
+export default async function ProposalBuilderPage() {
+  const businesses = await listProposalBusinesses();
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-zinc-100">Proposal Builder</h1>
-      <p className="text-zinc-400 mt-2">Módulo en construcción.</p>
+    <div className="mx-auto h-full w-full max-w-5xl">
+      <ProposalBuilderView initialBusinesses={businesses} />
     </div>
   );
 }

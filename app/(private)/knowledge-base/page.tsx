@@ -1,9 +1,16 @@
 // app/(private)/knowledge-base/page.tsx
-export default function KnowledgeBasePage() {
+// Knowledge Base — a searchable library of reusable templates, prompts, guides,
+// references, case studies and snippets.
+
+import { getKnowledgeData } from "@/features/knowledge-base/lib/store";
+import { KnowledgeBaseView } from "@/features/knowledge-base/components/knowledge-base-view";
+
+export default async function KnowledgeBasePage() {
+  const data = await getKnowledgeData();
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-zinc-100">Knowledge Base</h1>
-      <p className="text-zinc-400 mt-2">Módulo en construcción.</p>
+    <div className="mx-auto w-full max-w-7xl">
+      <KnowledgeBaseView initialData={data} />
     </div>
   );
 }

@@ -1,9 +1,15 @@
 // app/(private)/mvp-factory/page.tsx
-export default function MVPFactoryPage() {
+// MVP Factory — turns opportunities selected in the Analyzer into MVP specs.
+
+import { listFactoryBusinesses } from "@/features/mvp-factory/lib/spec-store";
+import { MvpFactoryView } from "@/features/mvp-factory/components/mvp-factory-view";
+
+export default async function MVPFactoryPage() {
+  const businesses = await listFactoryBusinesses();
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-zinc-100">MVP Factory</h1>
-      <p className="text-zinc-400 mt-2">Módulo en construcción.</p>
+    <div className="h-full w-full">
+      <MvpFactoryView initialBusinesses={businesses} />
     </div>
   );
 }

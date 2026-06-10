@@ -83,6 +83,16 @@ enum KnowledgeItemType {
   SNIPPET     // Fragmentos de código o contenido
 }
 
+// Estado de entrega de un MVP vendido (Delivery Workspace).
+enum DeliveryStatus {
+  QUEUED       // En cola — decidido construir, aún sin empezar
+  IN_PROGRESS  // En construcción
+  IN_REVIEW    // En revisión / QA con el cliente
+  DELIVERED    // Entregado
+  ON_HOLD      // En pausa
+  CANCELLED    // Cancelado
+}
+
 // ─── Technical ────────────────────────────────────────────────────────────────
 
 // Tabla de validación técnica creada en NZT-18. Se mantiene por historial.
@@ -107,6 +117,10 @@ model Company {
   mapsUrl  String?
   notes    String?
   status   CompanyStatus @default(PROSPECT)
+
+  // ── Seguimiento comercial (pipeline) ──────────────────────────────────────
+  lastContactAt DateTime? // Último contacto comercial registrado manualmente
+  nextAction    String?   // Próxima acción de venta planificada (texto libre)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
@@ -334,6 +348,10 @@ model PlaceCache {
   signals       Json? // PlaceSignals — calculado al cargar detalle
   opportunities Json? // DetectedOpportunity[] — calculado al cargar detalle
 
+  // ── Auditoría web (fetch directo a la web del negocio, sin APIs) ──────────
+  webAudit          Json?     // WebAuditResult — calculado bajo demanda si hay websiteUri
+  webAuditFetchedAt DateTime? // Cuándo se ejecutó la auditoría (null = nunca)
+
   // ── Respuestas crudas de la API ────────────────────────────────────────────
   rawSearch Json? // Objeto completo recibido de Nearby Search para este place
   rawDetail Json? // Objeto completo recibido de Place Details
@@ -355,4 +373,267 @@ model PlaceCache {
   @@index([latitude, longitude])
   @@index([searchFetchedAt])
   @@map("place_cache")
+}
+
+// ─── AI Business Analysis (Analyzer module) ─────────────────────────────────────
+
+// Análisis de negocio generado por IA (Claude + web_search).
+// Fuente: módulo Analyzer. Se vincula a un negocio del Rastreador via placeId.
+// Un análisis por placeId (@unique) — se regenera con upsert al re-analizar.
+model BusinessAnalysis {
+  id      String @id @default(cuid())
+  placeId String @unique // Google Places ID — vincula con PlaceCache del Rastreador
+
+  // ── Contexto del negocio en el momento del análisis ───────────────────────
+  businessName String
+  model        String  // Modelo de IA usado, e.g. "claude-opus-4-7"
+
+  // ── Salida del análisis ───────────────────────────────────────────────────
+  summary     String   // Resumen ejecutivo del negocio
+  assets      Json     // string[] — "lo que el negocio ya tiene"
+  webFindings Json     // { text, sources: {title,url}[] } — investigación en internet
+  rawOutput   Json?    // Respuesta cruda de la API para depuración
+
+  archivedAt DateTime? // Null = activo; not-null = archivado (soft-delete)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  opportunities AiOpportunity[]
+  brandIdentity BrandIdentity?
+
+  @@map("business_analyses")
+}
+
+// Identidad visual real del negocio (colores, tipografía, logo) usada para
+// generar mockups HTML fieles a la marca en lugar de paletas inventadas.
+// 1:1 con BusinessAnalysis — se detecta una vez y la reutilizan todas las
+// oportunidades/MVPs de ese negocio.
+model BrandIdentity {
+  id         String @id @default(cuid())
+  analysisId String @unique
+
+  source    String  // "website" | "logo" | "manual" — origen de la identidad
+  sourceUrl String? // URL de la web usada para extraer (si source="website")
+
+  colors      Json    // { role: string; hex: string; label?: string }[]
+  fontHeading String? // Nombre de Google Font para títulos
+  fontBody    String? // Nombre de Google Font para cuerpo de texto
+  styleNotes  String? @db.Text // Tono/personalidad de marca, en texto libre
+
+  logoImage          String? @db.Text // base64 (sin prefijo data:)
+  logoImageMime      String?
+  referenceImage     String? @db.Text // imagen de brief/inspiración subida manualmente
+  referenceImageMime String?
+
+  model String? // Modelo de IA usado para interpretar logo/web (si aplica)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  analysis BusinessAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@map("brand_identities")
+}
+
+// Oportunidad de negocio detectada por la IA dentro de un BusinessAnalysis.
+// Cuando selected=true, queda disponible para el módulo MVP Factory.
+model AiOpportunity {
+  id         String @id @default(cuid())
+  analysisId String
+
+  title       String
+  description String  // Qué es la oportunidad
+  development String  // "Qué podríamos hacer" — desarrollo concreto
+  impact      String? // "low" | "medium" | "high"
+  effort      String? // "low" | "medium" | "high"
+  selected    Boolean @default(false) // Marcada para pasar al MVP Factory
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  analysis BusinessAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  mvpSpec  AiMvpSpec?
+
+  @@index([analysisId])
+  @@map("ai_opportunities")
+}
+
+// Especificación de MVP generada por la IA para una AiOpportunity seleccionada.
+// 1:1 con AiOpportunity. Es el resultado del módulo MVP Factory.
+model AiMvpSpec {
+  id            String @id @default(cuid())
+  opportunityId String @unique
+
+  model      String // Modelo de IA usado, e.g. "claude-opus-4-7"
+  pitch      String // Frase de venta / one-liner
+  problem    String // Problema que resuelve
+  solution   String // Solución propuesta
+  targetUser String // Usuario objetivo
+
+  coreFeatures   Json // string[] — features imprescindibles del MVP
+  futureFeatures Json // string[] — mejoras posteriores (fuera del MVP)
+  techStack      Json // string[] — stack tecnológico recomendado
+  phases         Json // { title, description }[] — roadmap por fases
+
+  timeline   String // Estimación de tiempo (texto, e.g. "4-6 semanas")
+  complexity String? // "low" | "medium" | "high"
+  rawOutput  Json? // Respuesta cruda de la API para depuración
+
+  htmlMockup      String? @db.Text // HTML autocontenido del mockup (Tailwind CDN)
+  htmlMockupModel String? // Modelo de IA usado para el mockup HTML
+
+  archivedAt DateTime? // Null = activo; not-null = archivado (soft-delete)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  opportunity AiOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  pricing     AiPricing?    // Pricing Studio output (1:1)
+  proposal    AiProposal?   // Proposal Builder output (1:1)
+  delivery    AiDelivery?   // Delivery Workspace tracking (1:1)
+  images      AiMvpImage[]  // Mockups de diseño generados por IA (hero/features/detail)
+
+  @@map("ai_mvp_specs")
+}
+
+// Mockup de diseño web generado por IA (OpenAI gpt-image) para un AiMvpSpec.
+// Hasta 3 por spec (hero, features, detail). Se guarda el PNG en base64 para
+// que los diseños persistan entre sesiones sin depender de almacenamiento externo.
+model AiMvpImage {
+  id        String @id @default(cuid())
+  mvpSpecId String
+
+  kind  String // "hero" | "features" | "detail"
+  label String // Etiqueta legible, e.g. "Landing (hero)"
+  data  String // PNG en base64 (sin prefijo data:)
+  model String // Modelo de imagen usado, e.g. "gpt-image-2"
+
+  createdAt DateTime @default(now())
+
+  mvpSpec AiMvpSpec @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
+
+  @@unique([mvpSpecId, kind])
+  @@map("ai_mvp_images")
+}
+
+// Pricing generado por la IA para un AiMvpSpec. 1:1 con AiMvpSpec.
+// Es el resultado del módulo Pricing Studio: cómo cobrar este MVP a un negocio
+// local (precio de construcción, mantenimiento y planes/tiers), en EUR.
+model AiPricing {
+  id        String @id @default(cuid())
+  mvpSpecId String @unique
+
+  model    String // Modelo de IA usado, e.g. "claude-opus-4-7"
+  currency String @default("EUR")
+
+  setupPrice   Int  // Precio único de construcción del MVP (EUR)
+  monthlyPrice Int? // Cuota mensual de mantenimiento/hosting (EUR), si aplica
+
+  tiers           Json    // { name, price, billing, description, features[] }[]
+  recommendedTier String? // Nombre del plan recomendado
+  paymentTerms    String  // Condiciones de pago (e.g. "50% al inicio, 50% a la entrega")
+  rationale       String  // Justificación del precio
+  assumptions     Json    // string[] — supuestos sobre los que se basa el precio
+  saasModel       Json?   // Perspectiva de suscripción mensual (SaaS): { monthlyPrice, annualPrice, setupFee, minimumTermMonths, includedServices[], breakEvenMonths, rationale }
+  rawOutput       Json?   // Respuesta cruda de la API para depuración
+
+  archivedAt DateTime? // Null = activo; not-null = archivado (soft-delete)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mvpSpec AiMvpSpec @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
+
+  @@map("ai_pricings")
+}
+
+// Propuesta comercial generada por la IA para un AiMvpSpec. 1:1 con AiMvpSpec.
+// Es el resultado del módulo Proposal Builder: documento listo para enviar al
+// negocio, que combina el MVP y (si existe) su pricing.
+model AiProposal {
+  id        String @id @default(cuid())
+  mvpSpecId String @unique
+
+  model String // Modelo de IA usado, e.g. "claude-opus-4-7"
+
+  title            String // Título de la propuesta
+  executiveSummary String // Resumen ejecutivo
+  problemStatement String // El problema del negocio
+  proposedSolution String // La solución propuesta
+
+  scope        Json // string[] — qué incluye el proyecto
+  outOfScope   Json // string[] — qué NO incluye
+  deliverables Json // string[] — entregables concretos
+  phases       Json // { title, description }[] — plan de trabajo
+  terms        Json // string[] — términos y condiciones
+  nextSteps    Json // string[] — próximos pasos
+
+  investment   String // Resumen de inversión (texto, integra el pricing)
+  callToAction String // Cierre / llamada a la acción
+  rawOutput    Json?  // Respuesta cruda de la API para depuración
+
+  archivedAt DateTime? // Null = activo; not-null = archivado (soft-delete)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mvpSpec AiMvpSpec @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
+
+  @@map("ai_proposals")
+}
+
+// Seguimiento de entrega de un MVP a lo largo de su ejecución post-venta.
+// 1:1 con AiMvpSpec. Es el corazón del módulo Delivery Workspace. Se crea bajo
+// demanda cuando el usuario decide construir/entregar ese MVP.
+model AiDelivery {
+  id        String @id @default(cuid())
+  mvpSpecId String @unique
+
+  status    DeliveryStatus @default(QUEUED)
+  repoUrl   String?
+  deployUrl String?
+  notes     String?
+
+  startedAt   DateTime? // Cuándo pasó a IN_PROGRESS por primera vez
+  deliveredAt DateTime? // Cuándo pasó a DELIVERED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mvpSpec AiMvpSpec         @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
+  tasks   AiDeliveryTask[]
+
+  @@map("ai_deliveries")
+}
+
+// Ítem de checklist dentro de una entrega.
+model AiDeliveryTask {
+  id         String @id @default(cuid())
+  deliveryId String
+
+  title    String
+  done     Boolean @default(false)
+  position Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  delivery AiDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+  @@map("ai_delivery_tasks")
+}
+
+// ─── App settings (key-value) ─────────────────────────────────────────────────
+// Single-user app configuration. Used, among other things, to choose which AI
+// provider (anthropic | gemini) each module uses. Keys are namespaced, e.g.
+// "provider.mvp-factory".
+model AppSetting {
+  key   String @id
+  value String
+
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
 }

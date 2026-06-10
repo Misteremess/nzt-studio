@@ -12,6 +12,18 @@ export interface CompanyListItem {
   createdAt: Date;
 }
 
+/** Tarjeta del tablero pipeline — incluye los campos de seguimiento comercial */
+export interface PipelineCompany {
+  id: string;
+  name: string;
+  sector: string | null;
+  city: string | null;
+  status: CompanyStatus;
+  lastContactAt: Date | null;
+  nextAction: string | null;
+  updatedAt: Date;
+}
+
 export interface CompanyDetail {
   id: string;
   name: string;
