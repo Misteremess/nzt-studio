@@ -33,10 +33,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        # npm ci falla por entradas de bindings nativos específicas de macOS ARM
+        # que no existen en el lock generado en local (plataforma distinta al runner).
+        # npm install resuelve correctamente en el entorno Linux del runner.
+        run: npm install
 
       - name: Typecheck
         run: npx tsc --noEmit
