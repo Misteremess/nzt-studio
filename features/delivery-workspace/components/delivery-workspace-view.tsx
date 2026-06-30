@@ -5,7 +5,7 @@
 // "available to start"; once started they become deliveries with a status
 // lifecycle, a checklist, repo/deploy links and free-text notes. No AI.
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   Truck,
   Rocket,
@@ -20,6 +20,7 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  RotateCcw,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   addDeliveryTaskAction,
+  deleteDeliveryAction,
   deleteDeliveryTaskAction,
   setDeliveryStatusAction,
   setDeliveryTaskDoneAction,
@@ -217,6 +219,7 @@ function DeliveryCard({
 }) {
   const [expanded, setExpanded] = useState(true);
   const [pending, startTransition] = useTransition();
+  const [confirmUndo, setConfirmUndo] = useState(false);
   const [newTask, setNewTask] = useState("");
   const [repoUrl, setRepoUrl] = useState(delivery.repoUrl ?? "");
   const [deployUrl, setDeployUrl] = useState(delivery.deployUrl ?? "");
@@ -281,6 +284,14 @@ function DeliveryCard({
     });
   }
 
+  function undoDelivery() {
+    startTransition(async () => {
+      const r = await deleteDeliveryAction(delivery.id);
+      if (r.ok) onBoard(r.data);
+      else onError(r.error);
+    });
+  }
+
   return (
     <Card className="border-border">
       <CardContent className="space-y-3 p-3.5">
@@ -325,6 +336,35 @@ function DeliveryCard({
               </span>
             </div>
           )}
+          <div className="ml-auto">
+            {confirmUndo ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">¿Deshacer entrega?</span>
+                <button
+                  onClick={undoDelivery}
+                  disabled={pending}
+                  className="rounded px-1.5 py-0.5 text-[11px] font-medium text-rose-400 hover:bg-rose-500/10"
+                >
+                  Sí, deshacer
+                </button>
+                <button
+                  onClick={() => setConfirmUndo(false)}
+                  className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmUndo(true)}
+                title="Volver a 'Listos para iniciar'"
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-rose-500/40 hover:text-rose-400"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Deshacer inicio
+              </button>
+            )}
+          </div>
         </div>
 
         <button

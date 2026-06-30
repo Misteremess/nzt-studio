@@ -3,18 +3,28 @@ import { PrivateHeader } from "@/components/layout/private-header";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { SettingsProvider } from "@/components/settings/settings-modal";
 import { InactivityGuard } from "@/components/layout/inactivity-guard";
-import type { AiModuleId, AiProvider } from "@/lib/ai/types";
+import type { AiModuleId, AiProvider, AnthropicModel } from "@/lib/ai/types";
 
 interface AppShellProps {
   children: React.ReactNode;
   initialProviders: Record<AiModuleId, AiProvider>;
   keyAvailability: Record<AiProvider, boolean>;
+  initialAnthropicModel: AnthropicModel;
 }
 
-export function AppShell({ children, initialProviders, keyAvailability }: AppShellProps) {
+export function AppShell({
+  children,
+  initialProviders,
+  keyAvailability,
+  initialAnthropicModel,
+}: AppShellProps) {
   return (
     <ThemeProvider>
-      <SettingsProvider initialProviders={initialProviders} keyAvailability={keyAvailability}>
+      <SettingsProvider
+        initialProviders={initialProviders}
+        keyAvailability={keyAvailability}
+        initialAnthropicModel={initialAnthropicModel}
+      >
         <InactivityGuard />
         <div className="flex h-screen overflow-hidden bg-background print:h-auto print:overflow-visible print:bg-white">
           <Sidebar />

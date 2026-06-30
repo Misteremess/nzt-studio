@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 
 export default async function LoginPage() {
   const session = await auth();
-  if (session) redirect("/dashboard");
+  if (session) redirect("/home");
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">

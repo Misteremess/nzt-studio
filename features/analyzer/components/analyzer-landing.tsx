@@ -21,8 +21,6 @@ import {
   X,
 } from "lucide-react";
 
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   archiveAnalysisAction,
@@ -48,12 +46,16 @@ export function AnalyzerLanding({ analyses: initialAnalyses, forceList }: Props)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeletingSelected, startDeleteSelected] = useTransition();
 
+  // Deliberately an effect: sessionStorage only exists on the client, and the
+  // server must render the same "checking" placeholder as the first client
+  // render to avoid a hydration mismatch.
   useEffect(() => {
     if (forceList) return;
     const last = sessionStorage.getItem("analyzer:last");
     if (last && analyses.some((a) => a.placeId === last)) {
       router.replace(`/analyzer?placeId=${encodeURIComponent(last)}`);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time post-hydration decision from sessionStorage
       setChecking(false);
     }
   }, [forceList, analyses, router]);

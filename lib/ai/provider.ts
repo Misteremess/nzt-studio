@@ -9,15 +9,14 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
-import type { AiProvider } from "@/lib/ai/types";
+import { getAnthropicModel } from "@/lib/ai/settings";
+import { DEFAULT_ANTHROPIC_MODEL, type AiProvider } from "@/lib/ai/types";
 
-/** Concrete model id used for each provider. */
-export const ANTHROPIC_MODEL = "claude-opus-4-7";
 export const GEMINI_MODEL = "gemini-2.5-flash";
 
 /** Human-facing model id for the given provider (stored alongside outputs). */
-export function providerModelId(provider: AiProvider): string {
-  return provider === "gemini" ? GEMINI_MODEL : ANTHROPIC_MODEL;
+export async function providerModelId(provider: AiProvider): Promise<string> {
+  return provider === "gemini" ? GEMINI_MODEL : await getAnthropicModel();
 }
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
@@ -103,6 +102,7 @@ function getAnthropic(): Anthropic {
 
 async function generateWithAnthropic(opts: GenerateOptions): Promise<GenerateResult> {
   const client = getAnthropic();
+  const model = await getAnthropicModel().catch(() => DEFAULT_ANTHROPIC_MODEL);
 
   const tools = opts.webSearch
     ? [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 6 }]
@@ -110,7 +110,7 @@ async function generateWithAnthropic(opts: GenerateOptions): Promise<GenerateRes
 
   try {
     const stream = client.messages.stream({
-      model: ANTHROPIC_MODEL,
+      model,
       max_tokens: opts.maxTokens,
       thinking: { type: "adaptive" },
       output_config: { effort: "high" },
@@ -120,10 +120,18 @@ async function generateWithAnthropic(opts: GenerateOptions): Promise<GenerateRes
     });
 
     const message = await stream.finalMessage();
+    const text = extractAnthropicText(message);
+    if (!text && message.stop_reason === "max_tokens") {
+      throw new AiApiError(
+        "anthropic",
+        0,
+        "Claude agotó el límite de tokens pensando y no llegó a responder. Reintenta."
+      );
+    }
     return {
       provider: "anthropic",
-      model: ANTHROPIC_MODEL,
-      text: extractAnthropicText(message),
+      model,
+      text,
       raw: message,
       sources: opts.webSearch ? extractAnthropicSources(message) : [],
     };

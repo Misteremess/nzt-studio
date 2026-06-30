@@ -7,15 +7,16 @@
 // Exposes a SettingsProvider + useSettings() so any client component (e.g. the
 // header button) can open it.
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Settings, X, Moon, Sun, Palette, Sparkles, Check } from "lucide-react";
+import { Settings, X, Moon, Sun, Palette, Sparkles, Check, Database, AlertTriangle, Loader2, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme/theme-provider";
 import { ACCENTS } from "@/lib/theme/theme";
 import { ProviderSettings } from "@/features/settings/components/settings-view";
-import type { AiModuleId, AiProvider } from "@/lib/ai/types";
+import { resetApplicationDataAction, setAnthropicModelAction } from "@/features/settings/actions";
+import type { AiModuleId, AiProvider, AnthropicModel } from "@/lib/ai/types";
 
 // ─── Context ────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,10 @@ interface SettingsContextValue {
   open: () => void;
   close: () => void;
   isOpen: boolean;
+  providers: Record<AiModuleId, AiProvider>;
+  setProvider: (moduleId: AiModuleId, provider: AiProvider) => void;
+  anthropicModel: AnthropicModel;
+  setAnthropicModel: (model: AnthropicModel) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -30,22 +35,41 @@ const SettingsContext = createContext<SettingsContextValue | null>(null);
 interface ProviderProps {
   initialProviders: Record<AiModuleId, AiProvider>;
   keyAvailability: Record<AiProvider, boolean>;
+  initialAnthropicModel: AnthropicModel;
   children: React.ReactNode;
 }
 
-export function SettingsProvider({ initialProviders, keyAvailability, children }: ProviderProps) {
+export function SettingsProvider({
+  initialProviders,
+  keyAvailability,
+  initialAnthropicModel,
+  children,
+}: ProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [providers, setProviders] = useState(initialProviders);
+  const [anthropicModel, setAnthropicModelState] = useState(initialAnthropicModel);
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
+  const setProvider = useCallback((moduleId: AiModuleId, provider: AiProvider) => {
+    setProviders((prev) => ({ ...prev, [moduleId]: provider }));
+  }, []);
+  const setAnthropicModel = useCallback((model: AnthropicModel) => {
+    setAnthropicModelState(model);
+  }, []);
 
   return (
-    <SettingsContext.Provider value={{ open, close, isOpen }}>
+    <SettingsContext.Provider
+      value={{ open, close, isOpen, providers, setProvider, anthropicModel, setAnthropicModel }}
+    >
       {children}
       <SettingsModal
         open={isOpen}
         onClose={close}
-        initialProviders={initialProviders}
+        providers={providers}
+        setProvider={setProvider}
         keyAvailability={keyAvailability}
+        anthropicModel={anthropicModel}
+        setAnthropicModel={setAnthropicModel}
       />
     </SettingsContext.Provider>
   );
@@ -57,20 +81,59 @@ export function useSettings(): SettingsContextValue {
   return ctx;
 }
 
+/**
+ * Shared control for the global Anthropic model setting: optimistic update +
+ * persist to the DB, with revert on failure. Any component (settings modal,
+ * per-module selector) can use this and stay in sync via SettingsContext.
+ */
+export function useAnthropicModelControl() {
+  const { anthropicModel, setAnthropicModel } = useSettings();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [savingTo, setSavingTo] = useState<AnthropicModel | null>(null);
+
+  const select = useCallback(
+    (next: AnthropicModel) => {
+      if (next === anthropicModel || pending) return;
+      const previous = anthropicModel;
+      setError(null);
+      setSavingTo(next);
+      setAnthropicModel(next); // optimistic, propagates to all consumers
+      startTransition(async () => {
+        const result = await setAnthropicModelAction(next);
+        if (!result.ok) {
+          setAnthropicModel(previous);
+          setError(result.error);
+        }
+        setSavingTo(null);
+      });
+    },
+    [anthropicModel, pending, setAnthropicModel]
+  );
+
+  return { model: anthropicModel, select, pending, savingTo, error };
+}
+
 // ─── Modal ──────────────────────────────────────────────────────────────────
 
-type Tab = "interface" | "ai";
+type Tab = "interface" | "ai" | "data";
 
 function SettingsModal({
   open,
   onClose,
-  initialProviders,
+  providers,
+  setProvider,
   keyAvailability,
+  anthropicModel,
+  setAnthropicModel,
 }: {
   open: boolean;
   onClose: () => void;
-  initialProviders: Record<AiModuleId, AiProvider>;
+  providers: Record<AiModuleId, AiProvider>;
+  setProvider: (moduleId: AiModuleId, provider: AiProvider) => void;
   keyAvailability: Record<AiProvider, boolean>;
+  anthropicModel: AnthropicModel;
+  setAnthropicModel: (model: AnthropicModel) => void;
 }) {
   const [tab, setTab] = useState<Tab>("interface");
 
@@ -130,17 +193,25 @@ function SettingsModal({
               <TabButton active={tab === "ai"} onClick={() => setTab("ai")}>
                 <Sparkles className="h-3.5 w-3.5" /> Inteligencia Artificial
               </TabButton>
+              <TabButton active={tab === "data"} onClick={() => setTab("data")}>
+                <Database className="h-3.5 w-3.5" /> Datos
+              </TabButton>
             </div>
 
             {/* Body */}
             <div className="overflow-y-auto p-5">
               {tab === "interface" ? (
                 <InterfaceSettings />
-              ) : (
+              ) : tab === "ai" ? (
                 <ProviderSettings
-                  initialProviders={initialProviders}
+                  providers={providers}
+                  setProvider={setProvider}
                   keyAvailability={keyAvailability}
+                  anthropicModel={anthropicModel}
+                  setAnthropicModel={setAnthropicModel}
                 />
+              ) : (
+                <DataSettings />
               )}
             </div>
           </motion.div>
@@ -235,6 +306,121 @@ function InterfaceSettings() {
             );
           })}
         </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── Data section ───────────────────────────────────────────────────────────
+
+const RESET_PHRASE = "ELIMINAR TODO";
+
+function DataSettings() {
+  const [confirming, setConfirming] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function handleReset() {
+    setError(null);
+    startTransition(async () => {
+      const result = await resetApplicationDataAction(confirmText);
+      if (result.ok) {
+        try {
+          // Drop the persisted Rastreador session so the map starts clean too.
+          localStorage.removeItem("rastreador:session:v1");
+        } catch {
+          // Ignore storage access issues.
+        }
+        setDone(true);
+        setConfirming(false);
+        setConfirmText("");
+        setTimeout(() => window.location.reload(), 1200);
+      } else {
+        setError(result.error);
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="text-xs text-muted-foreground">
+        Gestiona los datos almacenados en la aplicación.
+      </p>
+
+      <section className="space-y-2.5 rounded-lg border border-rose-500/30 bg-rose-500/5 p-4">
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Restablecer aplicación</h3>
+            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+              Elimina permanentemente todas las empresas, análisis, oportunidades, MVPs,
+              propuestas, entregas, correos, agentes, negocios rastreados y cachés generados.
+              Los ajustes de IA se conservan. Esta acción no se puede deshacer.
+            </p>
+          </div>
+        </div>
+
+        {!confirming ? (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-400 transition-colors hover:bg-rose-500/20"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Restablecer aplicación
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs text-foreground">
+              Escribe <span className="font-mono font-semibold">{RESET_PHRASE}</span> para
+              confirmar:
+            </p>
+            <input
+              type="text"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={RESET_PHRASE}
+              autoFocus
+              className="w-full rounded-md border border-border bg-background/60 px-2.5 py-1.5 text-xs font-mono text-foreground outline-none focus:border-rose-500/50"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={confirmText !== RESET_PHRASE || pending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-400 transition-colors hover:bg-rose-500/20 disabled:opacity-40"
+              >
+                {pending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                Confirmar borrado
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirming(false);
+                  setConfirmText("");
+                  setError(null);
+                }}
+                disabled={pending}
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error && <p className="text-xs text-rose-400">{error}</p>}
+        {done && (
+          <p className="inline-flex items-center gap-1 text-xs text-emerald-400">
+            <Check className="h-3.5 w-3.5" /> Aplicación restablecida. Recargando...
+          </p>
+        )}
       </section>
     </div>
   );

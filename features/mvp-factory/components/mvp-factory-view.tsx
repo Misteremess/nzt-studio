@@ -33,10 +33,10 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { AiProviderNotice } from "@/components/ai/ai-provider-notice";
 import {
   generateMvpSpecAction,
   generateMvpImagesAction,
@@ -152,6 +152,8 @@ export function MvpFactoryView({ initialBusinesses }: Props) {
 
   return (
     <div className="flex flex-col h-full gap-5 overflow-y-auto">
+      <AiProviderNotice moduleId="mvp-factory" />
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground leading-tight">MVP Factory</h1>
@@ -314,12 +316,19 @@ function OpportunityCard({
   const [isGenerating, startGenerate] = useTransition();
   const [isArchiving, startArchive] = useTransition();
 
+  // "Colapsar todo" del padre: estado derivado durante el render (patrón React
+  // para reaccionar a cambios de props sin un setState en cascada en un efecto).
+  const [prevCollapseSignal, setPrevCollapseSignal] = useState(collapseSignal);
+  if (collapseSignal !== prevCollapseSignal) {
+    setPrevCollapseSignal(collapseSignal);
+    if (collapseSignal > 0 && opp.spec) setCollapsed(true);
+  }
+
+  // Persiste el colapso cuando cambia (la escritura en localStorage es un
+  // efecto externo, no puede ir en el bloque de render de arriba).
   useEffect(() => {
-    if (collapseSignal > 0 && opp.spec) {
-      setCollapsed(true);
-      localStorage.setItem(storageKey, "true");
-    }
-  }, [collapseSignal, opp.spec, storageKey]);
+    if (collapsed) localStorage.setItem(storageKey, "true");
+  }, [collapsed, storageKey]);
 
   function handleGenerate() {
     setError(null);
@@ -394,7 +403,7 @@ function OpportunityCard({
 
         {opp.spec && collapsed && (
           <div className="rounded-md border border-border bg-secondary/20 px-3 py-2 text-xs text-muted-foreground italic">
-            "{opp.spec.pitch}"
+            &ldquo;{opp.spec.pitch}&rdquo;
             {opp.spec.timeline && <span className="ml-2 not-italic text-foreground/60">· {opp.spec.timeline}</span>}
             {opp.spec.complexity && <span className="ml-1 not-italic text-foreground/60">· {COMPLEXITY_LABEL[opp.spec.complexity]}</span>}
           </div>
@@ -489,7 +498,7 @@ function ArchivedSpecCard({
               <Lightbulb className="h-3.5 w-3.5 text-amber-400/40 shrink-0" />
               {opp.title}
             </p>
-            {opp.spec && <p className="text-xs text-muted-foreground/70 italic mt-0.5 line-clamp-1">"{opp.spec.pitch}"</p>}
+            {opp.spec && <p className="text-xs text-muted-foreground/70 italic mt-0.5 line-clamp-1">&ldquo;{opp.spec.pitch}&rdquo;</p>}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400/80">Archivado</Badge>

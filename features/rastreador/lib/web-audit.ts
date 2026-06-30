@@ -50,6 +50,13 @@ const ANALYTICS_PATTERNS = [
  */
 export async function runWebAudit(websiteUri: string): Promise<WebAuditResult> {
   const url = normalizeUrl(websiteUri);
+
+  // SSRF guard: la URL procede de la ficha de Google Business (editable por
+  // terceros) — nunca debe apuntar el fetch del servidor a la red interna.
+  if (!isSafePublicUrl(url)) {
+    return unreachableResult(url);
+  }
+
   const startedAt = Date.now();
 
   let response: Response;
@@ -221,15 +228,60 @@ function computeAuditScore(issues: WebAuditIssue[]): number {
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
-function normalizeUrl(raw: string): string {
+export function normalizeUrl(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
   return `https://${trimmed}`;
 }
 
-async function fetchWithTimeout(url: string): Promise<Response> {
+/**
+ * Rechaza URLs que no sean http(s) públicas: localhost, IPs privadas/link-local
+ * (incluida la metadata de cloud 169.254.169.254), dominios internos e IPv6
+ * literales. Protección best-effort sin resolución DNS.
+ */
+export function isSafePublicUrl(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+
+  const host = parsed.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host.startsWith("[") // IPv6 literal — sin caso de uso legítimo aquí
+  ) {
+    return false;
+  }
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+    if (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) || // CGNAT
+      (a === 169 && b === 254) || // link-local / cloud metadata
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export async function fetchWithTimeout(url: string, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, {
       signal: controller.signal,
@@ -249,7 +301,7 @@ async function fetchWithTimeout(url: string): Promise<Response> {
 }
 
 /** Lee el body con un tope de bytes para no descargar páginas gigantes */
-async function readCapped(response: Response): Promise<string> {
+export async function readCapped(response: Response, maxBytes: number = MAX_HTML_BYTES): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return response.text();
 
@@ -257,12 +309,13 @@ async function readCapped(response: Response): Promise<string> {
   let html = "";
   let bytes = 0;
 
-  while (bytes < MAX_HTML_BYTES) {
+  while (bytes < maxBytes) {
     const { done, value } = await reader.read();
     if (done) break;
     bytes += value.byteLength;
     html += decoder.decode(value, { stream: true });
   }
+  html += decoder.decode(); // flush de bytes multibyte pendientes
   reader.cancel().catch(() => {});
   return html;
 }

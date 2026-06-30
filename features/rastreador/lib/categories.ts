@@ -18,6 +18,17 @@ export const OTHER_PLACE_TYPE = "other";
 
 export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
   {
+    label: "Todos los negocios (sin filtro)",
+    icon: "🌐",
+    placeType: OTHER_PLACE_TYPE,
+    sectorLabel: "Otro",
+    opportunityHints: [
+      "Web profesional con servicios",
+      "Presencia en Google Business",
+      "Canal de contacto digital (WhatsApp, formulario)",
+    ],
+  },
+  {
     label: "Panadería / Pastelería",
     icon: "🥐",
     placeType: "bakery",
@@ -459,17 +470,6 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
     opportunityHints: [
       "Ficha Google completa con horarios",
       "Pedido online / a domicilio",
-    ],
-  },
-  {
-    label: "Otros",
-    icon: "🏷️",
-    placeType: OTHER_PLACE_TYPE,
-    sectorLabel: "Otro",
-    opportunityHints: [
-      "Web profesional con servicios",
-      "Presencia en Google Business",
-      "Canal de contacto digital (WhatsApp, formulario)",
     ],
   },
 ];

@@ -3,8 +3,8 @@
 // Full-height workspace: Leaflet map + search + signals/opportunities panel.
 // All heavy logic lives in server actions (features/rastreador/actions.ts).
 
-import { AnalyzerView } from "@/features/rastreador/components/analyzer-view";
+import { AnalyzerViewClient } from "@/features/rastreador/components/analyzer-view-client";
 
 export default function RastreadorPage() {
-  return <AnalyzerView />;
+  return <AnalyzerViewClient />;
 }

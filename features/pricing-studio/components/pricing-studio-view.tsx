@@ -32,10 +32,10 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { AiProviderNotice } from "@/components/ai/ai-provider-notice";
 import {
   generatePricingAction,
   archivePricingAction,
@@ -136,6 +136,8 @@ export function PricingStudioView({ initialBusinesses }: Props) {
 
   return (
     <div className="flex flex-col h-full gap-5 overflow-y-auto">
+      <AiProviderNotice moduleId="pricing-studio" />
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground leading-tight">Pricing Studio</h1>
@@ -279,12 +281,19 @@ function PricingCard({
   const [isGenerating, startGenerate] = useTransition();
   const [isArchiving, startArchive] = useTransition();
 
+  // "Colapsar todo" del padre: estado derivado durante el render (patrón React
+  // para reaccionar a cambios de props sin un setState en cascada en un efecto).
+  const [prevCollapseSignal, setPrevCollapseSignal] = useState(collapseSignal);
+  if (collapseSignal !== prevCollapseSignal) {
+    setPrevCollapseSignal(collapseSignal);
+    if (collapseSignal > 0 && item.pricing) setCollapsed(true);
+  }
+
+  // Persiste el colapso cuando cambia (la escritura en localStorage es un
+  // efecto externo, no puede ir en el bloque de render de arriba).
   useEffect(() => {
-    if (collapseSignal > 0 && item.pricing) {
-      setCollapsed(true);
-      localStorage.setItem(storageKey, "true");
-    }
-  }, [collapseSignal, item.pricing, storageKey]);
+    if (collapsed) localStorage.setItem(storageKey, "true");
+  }, [collapsed, storageKey]);
 
   function handleGenerate() {
     setError(null);
@@ -335,7 +344,7 @@ function PricingCard({
               <Lightbulb className="h-3.5 w-3.5 text-amber-400 shrink-0" />
               {item.opportunityTitle}
             </p>
-            <p className="text-xs text-muted-foreground leading-relaxed mt-1 italic">"{item.pitch}"</p>
+            <p className="text-xs text-muted-foreground leading-relaxed mt-1 italic">&ldquo;{item.pitch}&rdquo;</p>
           </div>
         </div>
 

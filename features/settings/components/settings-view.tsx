@@ -11,13 +11,16 @@ import { Check, Loader2, AlertTriangle, Sparkles, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { setModuleProviderAction } from "@/features/settings/actions";
+import { setAnthropicModelAction, setModuleProviderAction } from "@/features/settings/actions";
 import {
   AI_MODULES,
   AI_PROVIDERS,
+  ANTHROPIC_MODELS,
   PROVIDER_META,
+  providerModelLabel,
   type AiModuleId,
   type AiProvider,
+  type AnthropicModel,
 } from "@/lib/ai/types";
 
 const PROVIDER_ICON: Record<AiProvider, React.ReactNode> = {
@@ -26,13 +29,20 @@ const PROVIDER_ICON: Record<AiProvider, React.ReactNode> = {
 };
 
 interface Props {
-  initialProviders: Record<AiModuleId, AiProvider>;
+  providers: Record<AiModuleId, AiProvider>;
+  setProvider: (moduleId: AiModuleId, provider: AiProvider) => void;
   keyAvailability: Record<AiProvider, boolean>;
+  anthropicModel: AnthropicModel;
+  setAnthropicModel: (model: AnthropicModel) => void;
 }
 
-export function ProviderSettings({ initialProviders, keyAvailability }: Props) {
-  const [providers, setProviders] = useState(initialProviders);
-
+export function ProviderSettings({
+  providers,
+  setProvider,
+  keyAvailability,
+  anthropicModel,
+  setAnthropicModel,
+}: Props) {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-xs text-muted-foreground">
@@ -78,6 +88,13 @@ export function ProviderSettings({ initialProviders, keyAvailability }: Props) {
         })}
       </div>
 
+      {/* Anthropic model selection */}
+      <AnthropicModelSettings
+        model={anthropicModel}
+        setModel={setAnthropicModel}
+        available={keyAvailability.anthropic}
+      />
+
       {/* Per-module provider selection */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Proveedor por módulo</h3>
@@ -89,15 +106,96 @@ export function ProviderSettings({ initialProviders, keyAvailability }: Props) {
               label={m.label}
               description={m.description}
               provider={providers[m.id]}
+              anthropicModel={anthropicModel}
               keyAvailability={keyAvailability}
-              onChange={(provider) =>
-                setProviders((prev) => ({ ...prev, [m.id]: provider }))
-              }
+              onChange={(provider) => setProvider(m.id, provider)}
             />
           ))}
         </div>
       </section>
     </div>
+  );
+}
+
+// ─── Anthropic model selection ─────────────────────────────────────────────────
+
+function AnthropicModelSettings({
+  model,
+  setModel,
+  available,
+}: {
+  model: AnthropicModel;
+  setModel: (model: AnthropicModel) => void;
+  available: boolean;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [savingTo, setSavingTo] = useState<AnthropicModel | null>(null);
+
+  function select(next: AnthropicModel) {
+    if (next === model || pending) return;
+    const previous = model;
+    setError(null);
+    setSavingTo(next);
+    setModel(next); // optimistic
+    startTransition(async () => {
+      const result = await setAnthropicModelAction(next);
+      if (!result.ok) {
+        setModel(previous); // revert
+        setError(result.error);
+      }
+      setSavingTo(null);
+    });
+  }
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">Modelo de Claude (Anthropic)</h3>
+        <p className="text-xs text-muted-foreground">
+          Modelo usado por todos los módulos configurados con Anthropic.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {ANTHROPIC_MODELS.map((m) => {
+          const active = model === m.id;
+          const isSaving = pending && savingTo === m.id;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => select(m.id)}
+              disabled={pending || !available}
+              className={cn(
+                "flex flex-col items-start rounded-md border p-2.5 text-left transition-colors disabled:opacity-60",
+                active
+                  ? "border-indigo-500 bg-indigo-500/10"
+                  : "border-border bg-background/40 hover:border-indigo-500/40"
+              )}
+            >
+              <span className="flex w-full items-center justify-between gap-1.5">
+                <span className="text-xs font-medium text-foreground inline-flex items-center gap-1.5">
+                  <Bot className="h-3.5 w-3.5" />
+                  {m.label}
+                </span>
+                {isSaving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+                ) : active ? (
+                  <Check className="h-3.5 w-3.5 text-indigo-400" />
+                ) : null}
+              </span>
+              <span className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{m.note}</span>
+            </button>
+          );
+        })}
+      </div>
+      {!available && (
+        <p className="text-[11px] text-amber-400 inline-flex items-center gap-1">
+          <AlertTriangle className="h-3 w-3" /> Falta ANTHROPIC_API_KEY
+        </p>
+      )}
+      {error && <p className="text-xs text-rose-400">{error}</p>}
+    </section>
   );
 }
 
@@ -108,6 +206,7 @@ function ModuleRow({
   label,
   description,
   provider,
+  anthropicModel,
   keyAvailability,
   onChange,
 }: {
@@ -115,6 +214,7 @@ function ModuleRow({
   label: string;
   description: string;
   provider: AiProvider;
+  anthropicModel: AnthropicModel;
   keyAvailability: Record<AiProvider, boolean>;
   onChange: (provider: AiProvider) => void;
 }) {
@@ -179,7 +279,7 @@ function ModuleRow({
                   ) : null}
                 </span>
                 <span className="mt-0.5 text-[11px] text-muted-foreground">
-                  {meta.modelLabel}
+                  {providerModelLabel(p, anthropicModel)}
                   {meta.free ? " · gratis" : ""}
                 </span>
                 {active && missingKey && (

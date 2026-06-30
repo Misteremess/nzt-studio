@@ -14,6 +14,9 @@ import {
 } from "@/features/rastreador/lib/google-places";
 import {
   getPlaceCacheByPlaceId,
+  getCachedPlaceIds,
+  getCachedOpportunityScores,
+  getCachedPlacesNearby,
   upsertPlaceSummaries,
   upsertPlaceDetail,
   updateCacheSignals,
@@ -97,14 +100,16 @@ export async function searchPlacesAction(
     }
   }
 
-  // 3. Search nearby
+  // 3. Search nearby — prioritize places not already in PlaceCache so the
+  //    results cap isn't spent re-surfacing places we've searched before.
   let searchResult: Awaited<ReturnType<typeof searchNearby>>;
   try {
     searchResult = await searchNearby(
       center,
       cappedRadius,
       placeType,
-      cappedResults
+      cappedResults,
+      getCachedPlaceIds
     );
   } catch (err) {
     return placesErrorResult(err);
@@ -123,10 +128,41 @@ export async function searchPlacesAction(
     }
   }
 
-  // 5. Return
+  // 5. Attach opportunity scores for places already analyzed before, so the
+  //    map can color pins by potential without re-fetching every detail.
+  let placesWithScores = places;
+  if (places.length > 0) {
+    try {
+      const scores = await getCachedOpportunityScores(places.map((p) => p.placeId));
+      placesWithScores = places.map((p) => ({
+        ...p,
+        score: scores.get(p.placeId) ?? null,
+      }));
+    } catch {
+      console.error("[Analyzer] Failed to load cached opportunity scores");
+    }
+  }
+
+  // 6. Merge in previously-discovered places near this center that the API
+  //    page didn't return — free (no API call), keeps already-found pins on
+  //    the map across searches without spending search quota.
+  try {
+    const cachedNearby = await getCachedPlacesNearby(center, cappedRadius);
+    const seen = new Set(placesWithScores.map((p) => p.placeId));
+    for (const cp of cachedNearby) {
+      if (!seen.has(cp.placeId)) {
+        placesWithScores.push(cp);
+        seen.add(cp.placeId);
+      }
+    }
+  } catch {
+    console.error("[Analyzer] Failed to load cached nearby places");
+  }
+
+  // 7. Return
   return {
     ok: true,
-    data: { places, center, radiusMeters: cappedRadius },
+    data: { places: placesWithScores, center, radiusMeters: cappedRadius },
   };
 }
 
@@ -142,6 +178,8 @@ export interface DetailActionData {
   companyId: string | null;
   /** Cached web audit, if one was run before (may be stale — UI can re-run) */
   webAudit: WebAuditResult | null;
+  /** ISO timestamp of when the detail data was last fetched from Google Places */
+  detailFetchedAt: string | null;
 }
 
 /**
@@ -186,23 +224,68 @@ export async function fetchPlaceDetailAction(
         fromCache: true,
         companyId: cached.companyId,
         webAudit: parseCachedJson<WebAuditResult>(cached.webAudit),
+        detailFetchedAt: cached.detailFetchedAt.toISOString(),
       },
     };
   }
 
   // Cache miss or stale — fetch from Places API
-  let apiDetail: PlaceDetail;
-  let apiRaw: unknown;
   try {
-    const result = await fetchPlaceDetail(placeId);
-    apiDetail = result.detail;
-    apiRaw = result.raw;
+    return await fetchAndPersistDetail(placeId, cached);
   } catch (err) {
     return placesErrorResult(err);
   }
+}
+
+// ─── Refresh detail action ─────────────────────────────────────────────────────
+
+/**
+ * Forces a fresh fetch of a business's details from the Places API,
+ * bypassing the cache TTL. Used by the "Actualizar datos" button when the
+ * cached data is old.
+ *
+ * @param placeId - Google Places ID from a prior search result
+ */
+export async function refreshPlaceDetailAction(
+  placeId: string
+): Promise<ActionResult<DetailActionData>> {
+  const parsed = fetchDetailInputSchema.safeParse({ placeId });
+  if (!parsed.success) {
+    return { ok: false, error: "Place ID no válido.", errorCode: "INVALID_INPUT" };
+  }
+
+  let cached: PlaceCacheRow | null = null;
+  try {
+    cached = await getPlaceCacheByPlaceId(placeId);
+  } catch {
+    console.error("[Analyzer] PlaceCache read failed for", placeId);
+  }
+
+  try {
+    return await fetchAndPersistDetail(placeId, cached);
+  } catch (err) {
+    return placesErrorResult(err);
+  }
+}
+
+/**
+ * Fetches fresh detail data from the Places API, computes signals and
+ * opportunities, and persists everything to PlaceCache.
+ * Shared by fetchPlaceDetailAction (cache miss/stale) and
+ * refreshPlaceDetailAction (forced refresh).
+ */
+async function fetchAndPersistDetail(
+  placeId: string,
+  cached: PlaceCacheRow | null
+): Promise<ActionResult<DetailActionData>> {
+  const result = await fetchPlaceDetail(placeId);
+  const apiDetail = result.detail;
+  const apiRaw = result.raw;
 
   // Compute signals and opportunities
   const { signals, opportunities } = computeSignalsAndOpportunities(apiDetail);
+
+  const now = new Date();
 
   // Persist detail + computed data (non-blocking on failure)
   try {
@@ -221,6 +304,7 @@ export async function fetchPlaceDetailAction(
       fromCache: false,
       companyId: cached?.companyId ?? null,
       webAudit: parseCachedJson<WebAuditResult>(cached?.webAudit ?? null),
+      detailFetchedAt: now.toISOString(),
     },
   };
 }
@@ -419,6 +503,7 @@ function rowToDetail(row: PlaceCacheRow): PlaceDetail {
     types: row.types,
     primaryType: row.primaryType,
     businessStatus: (row.businessStatus ?? "UNKNOWN") as PlaceBusinessStatus,
+    score: null,
     rating: row.rating,
     userRatingCount: row.userRatingCount,
     websiteUri: row.websiteUri,

@@ -68,7 +68,14 @@ npm run dev
 # → Redirige automáticamente a /login
 ```
 
-Introduce las credenciales configuradas en `PRIVATE_ADMIN_EMAIL` y `PRIVATE_ADMIN_PASSWORD`.
+Los usuarios viven en la tabla `users` (no hay admin por env). Crea una cuenta:
+
+```bash
+npm run users:create -- tu-email@dominio.com "Tu Nombre"
+```
+
+En el primer login configurarás el **2FA** escaneando un QR con Google
+Authenticator. Más comandos: `npm run users:list`, `npm run users:reset-2fa -- <email>`.
 
 ---
 
@@ -81,10 +88,18 @@ npm run start         # Servidor de producción
 npm run lint          # ESLint
 
 npm run db:generate   # Regenera Prisma Client desde el schema
-npm run db:migrate    # Aplica migraciones pendientes a Neon
+npm run db:migrate    # Aplica migraciones pendientes (dev)
+npm run db:deploy     # Aplica migraciones en producción (prisma migrate deploy)
 npm run db:studio     # Abre Prisma Studio en el navegador
 npm run db:push       # Push del schema sin migración (solo exploración)
+
+npm run users:create        # Crea un usuario: -- <email> <nombre> [password]
+npm run users:list          # Lista los usuarios
+npm run users:reset-2fa     # Reinicia el 2FA de un usuario: -- <email>
+npm run users:reset-password # Cambia la contraseña: -- <email> [password]
 ```
+
+> Despliegue en VPS (Docker + Nginx): ver [`DEPLOY.md`](DEPLOY.md).
 
 ---
 
@@ -101,8 +116,7 @@ cp .env.example .env.local
 | `DATABASE_URL` | Connection string de PostgreSQL | Neon → Connection Details → Connection string (sin pooler) |
 | `AUTH_SECRET` | Secreto para firmar sesiones JWT | `openssl rand -base64 32` |
 | `AUTH_TRUST_HOST` | Confianza en el host (necesario fuera de Vercel) | `true` |
-| `PRIVATE_ADMIN_EMAIL` | Email de acceso privado | El que decidas |
-| `PRIVATE_ADMIN_PASSWORD` | Contraseña de acceso privado | Una contraseña segura |
+| `TOTP_ENCRYPTION_KEY` | Cifra los secretos 2FA en reposo | `openssl rand -base64 32` |
 
 > `.env.local` está en `.gitignore`. Nunca lo commitees.
 

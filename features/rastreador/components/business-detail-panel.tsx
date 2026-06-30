@@ -13,6 +13,9 @@ import {
   FileText,
   ShieldAlert,
   CheckCircle2,
+  RefreshCw,
+  Target,
+  PenTool,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +50,19 @@ const PRIORITY_CLASSES: Record<OpportunityPriority, string> = {
   medium: "bg-amber-500/10 text-amber-400 border-amber-500/20",
   low: "bg-slate-500/10 text-slate-400 border-slate-500/20",
 };
+
+/** Relative "hace X" string for the last detail refresh timestamp. */
+function relativeUpdatedLabel(isoDate: string): string {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "hace un momento";
+  if (diffMin < 60) return `hace ${diffMin} min`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `hace ${diffHours} h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "hace 1 día";
+  return `hace ${diffDays} días`;
+}
 
 function scoreStyle(score: number): { label: string; color: string; bar: string } {
   if (score === 0) return { label: scoreLabel(score), color: "text-muted-foreground", bar: "bg-muted" };
@@ -227,6 +243,10 @@ export interface BusinessDetailPanelProps {
   webAudit: WebAuditResult | null;
   isAuditing: boolean;
   auditError: string | null;
+  detailFetchedAt: string | null;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+  refreshError: string | null;
 }
 
 export function BusinessDetailPanel({
@@ -242,6 +262,10 @@ export function BusinessDetailPanel({
   webAudit,
   isAuditing,
   auditError,
+  detailFetchedAt,
+  isRefreshing,
+  onRefresh,
+  refreshError,
 }: BusinessDetailPanelProps) {
   const effectiveCompanyId = savedCompanyId ?? companyId;
   const isPermanentlyClosed = detail.businessStatus === "CLOSED_PERMANENTLY";
@@ -287,6 +311,26 @@ export function BusinessDetailPanel({
 
         {detail.formattedAddress && (
           <p className="mt-1 text-xs text-muted-foreground">{detail.formattedAddress}</p>
+        )}
+
+        <div className="mt-1.5 flex items-center gap-2">
+          {detailFetchedAt && (
+            <span className="text-[11px] text-muted-foreground/70">
+              Datos actualizados {relativeUpdatedLabel(detailFetchedAt)}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
+            {isRefreshing ? "Actualizando..." : "Actualizar datos"}
+          </button>
+        </div>
+        {refreshError && (
+          <p className="mt-1 text-[11px] text-rose-400">{refreshError}</p>
         )}
 
         <div className="mt-2 flex items-center flex-wrap gap-x-4 gap-y-1">
@@ -419,6 +463,18 @@ export function BusinessDetailPanel({
             >
               <FileText className="h-4 w-4 mr-2" />
               Informe de presencia digital
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="w-full">
+            <Link href={`/competitor-radar?placeId=${encodeURIComponent(detail.placeId)}`}>
+              <Target className="h-4 w-4 mr-2" />
+              Radar de competencia
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="w-full">
+            <Link href={`/content-seo?placeId=${encodeURIComponent(detail.placeId)}`}>
+              <PenTool className="h-4 w-4 mr-2" />
+              Plan de contenido
             </Link>
           </Button>
         </div>

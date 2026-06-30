@@ -182,3 +182,8 @@ export async function setDeliveryTaskDone(taskId: string, done: boolean): Promis
 export async function deleteDeliveryTask(taskId: string): Promise<void> {
   await prisma.aiDeliveryTask.delete({ where: { id: taskId } });
 }
+
+/** Deletes a delivery (and its tasks), returning its spec to the "available to start" pool. */
+export async function deleteDelivery(deliveryId: string): Promise<void> {
+  await prisma.aiDelivery.delete({ where: { id: deliveryId } });
+}

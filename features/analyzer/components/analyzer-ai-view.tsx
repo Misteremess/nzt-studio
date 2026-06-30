@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { AiProviderNotice } from "@/components/ai/ai-provider-notice";
 import {
   analyzeBusinessAction,
   toggleOpportunityAction,
@@ -120,6 +121,8 @@ export function AnalyzerAiView({ placeId, businessName, initialAnalysis }: Props
 
   return (
     <div className="flex flex-col h-full gap-4 overflow-y-auto">
+      <AiProviderNotice moduleId="analyzer" />
+
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-3">
         <div>

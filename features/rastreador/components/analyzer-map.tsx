@@ -86,7 +86,18 @@ export default function AnalyzerMap({
   // invisible on light tiles, so use a dark slate fill there instead.
   const markerColor = isLight ? "#0f172a" : "#ffffff";
 
+  // Color pins by Score NZT (potencial de oportunidad). Places not yet
+  // analyzed (score === null) keep the neutral marker color.
+  function pinColor(score: number | null): string {
+    if (score === null) return markerColor;
+    if (score === 0) return "#64748b"; // slate — sin potencial
+    if (score <= 2) return "#94a3b8"; // slate claro — potencial bajo
+    if (score <= 5) return "#f59e0b"; // amber — potencial medio
+    return "#10b981"; // emerald — potencial alto
+  }
+
   return (
+    <div className="relative h-full w-full">
     <MapContainer
       center={DEFAULT_CENTER}
       zoom={DEFAULT_ZOOM}
@@ -141,14 +152,15 @@ export default function AnalyzerMap({
       {/* Business markers */}
       {places.map((place) => {
         const selected = place.placeId === selectedPlaceId;
+        const color = selected ? "#6366f1" : pinColor(place.score);
         return (
           <CircleMarker
             key={place.placeId}
             center={[place.location.latitude, place.location.longitude]}
             radius={selected ? 10 : 7}
             pathOptions={{
-              color: selected ? "#6366f1" : markerColor,
-              fillColor: selected ? "#6366f1" : markerColor,
+              color,
+              fillColor: color,
               fillOpacity: 1,
               weight: selected ? 2.5 : 1.5,
               opacity: 1,
@@ -163,10 +175,35 @@ export default function AnalyzerMap({
             <Tooltip direction="top" offset={[0, -10]}>
               {place.name}
               {place.rating !== null ? ` · ${place.rating.toFixed(1)} ★` : ""}
+              {place.score !== null ? ` · Score ${place.score}/9` : ""}
             </Tooltip>
           </CircleMarker>
         );
       })}
     </MapContainer>
+
+      {/* Legend — color = potencial de oportunidad para negocios analizados */}
+      <div className="pointer-events-none absolute bottom-2 left-2 z-[1000] rounded-md border border-border/60 bg-background/85 px-2 py-1.5 text-[10px] text-muted-foreground backdrop-blur-sm">
+        <p className="mb-1 font-medium text-foreground/80">Potencial de oportunidad</p>
+        <div className="flex flex-col gap-0.5">
+          <LegendRow color="#10b981" label="Alto" />
+          <LegendRow color="#f59e0b" label="Medio" />
+          <LegendRow color="#94a3b8" label="Bajo / nulo" />
+          <LegendRow color={markerColor} label="Sin analizar" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LegendRow({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className="h-2.5 w-2.5 rounded-full border border-border/40"
+        style={{ backgroundColor: color }}
+      />
+      <span>{label}</span>
+    </div>
   );
 }

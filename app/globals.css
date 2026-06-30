@@ -104,3 +104,12 @@ body {
   max-width: none;
   box-sizing: content-box;
 }
+
+/* Hides the scrollbar while keeping the element scrollable (e.g. the sidebar dock). */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

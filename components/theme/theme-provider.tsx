@@ -32,9 +32,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [accent, setAccentState] = useState<string>(DEFAULT_ACCENT);
 
   // Sync React state with whatever the bootstrap script already applied.
+  // Deliberately an effect (not a lazy initializer): consumers like the header
+  // render theme-dependent markup during SSR, so state must match the server
+  // default at hydration and only then adopt the stored value.
   useEffect(() => {
     const storedMode = localStorage.getItem(THEME_STORAGE_KEY);
     const storedAccent = localStorage.getItem(ACCENT_STORAGE_KEY);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time post-hydration sync with localStorage
     setModeState(storedMode === "light" ? "light" : "dark");
     setAccentState(accentById(storedAccent ?? DEFAULT_ACCENT).id);
   }, []);

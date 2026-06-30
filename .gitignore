@@ -30,11 +30,16 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — commit only .env.example, never real secrets
+# env files — commit only the *.example templates, never real secrets
 .env.local
 .env*.local
 .env*
 !.env.example
+!.env.production.example
+
+# Certbot — certificados TLS emitidos en el servidor, nunca en el repo
+nginx/certbot/conf/
+nginx/certbot/www/
 
 # exact ignore entries requested
 .next/

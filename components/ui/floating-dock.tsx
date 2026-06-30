@@ -16,6 +16,7 @@ import {
   type MotionValue,
 } from "motion/react";
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
@@ -70,13 +71,20 @@ function IconContainer({
   const iconSize = useSpring(iconSizeT, spring);
 
   const [hovered, setHovered] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
+
+  function handleMouseEnter() {
+    const bounds = ref.current?.getBoundingClientRect();
+    if (bounds) setTooltipPos({ top: bounds.top + bounds.height / 2, left: bounds.right + 12 });
+    setHovered(true);
+  }
 
   return (
     <Link href={href}>
       <motion.div
         ref={ref}
         style={{ width: size, height: size }}
-        onMouseEnter={() => setHovered(true)}
+        onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setHovered(false)}
         className={cn(
           "relative flex aspect-square items-center justify-center rounded-xl transition-colors",
@@ -85,18 +93,23 @@ function IconContainer({
             : "bg-secondary/40 text-muted-foreground hover:text-foreground"
         )}
       >
-        <AnimatePresence>
-          {hovered && (
-            <motion.div
-              initial={{ opacity: 0, x: -6, y: "-50%" }}
-              animate={{ opacity: 1, x: 0, y: "-50%" }}
-              exit={{ opacity: 0, x: -6, y: "-50%" }}
-              className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 w-fit whitespace-pre rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs font-medium text-popover-foreground shadow-lg"
-            >
-              {title}
-            </motion.div>
+        {typeof document !== "undefined" &&
+          createPortal(
+            <AnimatePresence>
+              {hovered && tooltipPos && (
+                <motion.div
+                  initial={{ opacity: 0, x: -6, y: "-50%" }}
+                  animate={{ opacity: 1, x: 0, y: "-50%" }}
+                  exit={{ opacity: 0, x: -6, y: "-50%" }}
+                  style={{ position: "fixed", top: tooltipPos.top, left: tooltipPos.left }}
+                  className="pointer-events-none z-50 w-fit whitespace-pre rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs font-medium text-popover-foreground shadow-lg"
+                >
+                  {title}
+                </motion.div>
+              )}
+            </AnimatePresence>,
+            document.body
           )}
-        </AnimatePresence>
 
         <motion.div
           style={{ width: iconSize, height: iconSize }}

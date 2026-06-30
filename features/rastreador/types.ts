@@ -29,6 +29,11 @@ export interface PlaceSummary {
   businessStatus: PlaceBusinessStatus;
   rating: number | null;
   userRatingCount: number | null;
+  /**
+   * Score NZT (0-9) si este negocio ya fue analizado (PlaceCache.opportunities
+   * disponible). null si todavía no se ha cargado su detalle.
+   */
+  score: number | null;
 }
 
 /** Datos completos tras Place Details (cargados bajo demanda) */

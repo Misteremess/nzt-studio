@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   addDeliveryTask,
+  deleteDelivery,
   deleteDeliveryTask,
   getDeliveryBoard,
   setDeliveryStatus,
@@ -62,6 +63,21 @@ export async function startDeliveryAction(
     return { ok: true, data };
   } catch {
     return { ok: false, error: "No se pudo iniciar la entrega.", errorCode: "DB_ERROR" };
+  }
+}
+
+/** Deletes a delivery, returning its spec to "Listos para iniciar". */
+export async function deleteDeliveryAction(deliveryId: string): Promise<ActionResult<DeliveryBoard>> {
+  if (!deliveryId) {
+    return { ok: false, error: "Entrega no válida.", errorCode: "INVALID_INPUT" };
+  }
+  try {
+    await deleteDelivery(deliveryId);
+    refresh();
+    const data = await getDeliveryBoard();
+    return { ok: true, data };
+  } catch {
+    return { ok: false, error: "No se pudo deshacer la entrega.", errorCode: "DB_ERROR" };
   }
 }
 

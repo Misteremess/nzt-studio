@@ -93,6 +93,50 @@ enum DeliveryStatus {
   CANCELLED    // Cancelado
 }
 
+// Tipo de reunión propuesta en un correo generado (Email Generator).
+enum EmailMeetingType {
+  NONE       // No se propone ninguna reunión
+  CALL       // Llamada telefónica
+  VIDEO_CALL // Videollamada (Teams)
+  IN_PERSON  // Reunión presencial
+}
+
+// Canal por el que opera un agente de IA propio (AI Agents).
+enum AiAgentChannel {
+  WHATSAPP // WhatsApp Business
+  EMAIL    // Correo
+  PHONE    // Llamadas (ElevenLabs)
+}
+
+// Estado operativo de un agente de IA propio (AI Agents).
+enum AiAgentStatus {
+  ACTIVE // En producción, atendiendo
+  PAUSED // Desactivado temporalmente
+  DRAFT  // En configuración / pruebas
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+// Usuario con acceso al cockpit privado. Reemplaza al admin único por env vars.
+// Cada usuario tiene su propia contraseña (bcrypt) y su propio 2FA (TOTP /
+// Google Authenticator). El secreto TOTP se guarda cifrado en reposo (AES-256-
+// GCM, ver lib/auth/secret-crypto.ts). No hay registro público: las cuentas se
+// crean con scripts/manage-users.ts.
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String
+  passwordHash String // bcrypt
+  totpSecret   String? // base32 cifrado; null hasta iniciar el enrolamiento 2FA
+  totpEnabled  Boolean @default(false) // true solo tras confirmar el primer código
+  role         String  @default("member") // "admin" | "member" — reservado para el futuro
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
 // ─── Technical ────────────────────────────────────────────────────────────────
 
 // Tabla de validación técnica creada en NZT-18. Se mantiene por historial.
@@ -579,6 +623,7 @@ model AiProposal {
   updatedAt DateTime @updatedAt
 
   mvpSpec AiMvpSpec @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
+  callScript AiCallScript?
 
   @@map("ai_proposals")
 }
@@ -625,6 +670,67 @@ model AiDeliveryTask {
   @@map("ai_delivery_tasks")
 }
 
+// Borrador de correo generado por la IA (Email Generator). Cada registro es un
+// correo autocontenido: puede presentar una o varias oportunidades/MVPs (sin
+// adjuntarlos), proponer una reunión, o ser totalmente independiente (e.g.
+// "vender nuestros servicios de agentes de IA"). No tiene relaciones con otras
+// tablas — las referencias a oportunidades/MVPs se guardan como snapshot JSON.
+model AiEmailDraft {
+  id String @id @default(cuid())
+
+  model String // Modelo de IA usado, e.g. "claude-opus-4-7"
+
+  // ── Entrada (lo que el usuario configuró para generar el correo) ──────────
+  objective     String @db.Text // Objetivo del correo, en texto libre
+  recipientName String // Nombre del destinatario
+  recipientRole String // Cargo del destinatario (puede ir vacío)
+  businessName  String // Empresa/negocio destinatario (puede ir vacío para genéricos)
+  senderName    String // Quién firma el correo
+
+  meetingType  EmailMeetingType @default(NONE)
+  meetingNotes String? // Preferencias de horario/lugar para la reunión propuesta
+
+  references Json // EmailReference[] — oportunidades/MVPs presentados (snapshot)
+
+  // ── Salida ──────────────────────────────────────────────────────────────
+  subject   String
+  body      String @db.Text
+  rawOutput Json? // Respuesta cruda de la API para depuración
+
+  archivedAt DateTime? // Null = activo; not-null = archivado (soft-delete)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_email_drafts")
+}
+
+// Agente de IA propio de NZT Studio, desplegado para un cliente o uso interno
+// (WhatsApp Business, correo o llamadas vía ElevenLabs). Módulo de gestión/CRUD,
+// sin generación por IA.
+model AiAgent {
+  id String @id @default(cuid())
+
+  name        String
+  channel     AiAgentChannel
+  status      AiAgentStatus @default(ACTIVE)
+  description String?       @db.Text // Para qué sirve / qué hace este agente
+
+  clientName String? // Cliente/negocio al que pertenece (vacío si es interno de NZT)
+
+  // ── Config específica de canal ────────────────────────────────────────────
+  phoneNumber       String? // Nº de WhatsApp Business / teléfono
+  emailAddress      String? // Dirección de correo gestionada
+  elevenLabsAgentId String? // ID del agente de voz en ElevenLabs
+
+  notes String? @db.Text // Notas libres (prompts, configuración, incidencias…)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_agents")
+}
+
 // ─── App settings (key-value) ─────────────────────────────────────────────────
 // Single-user app configuration. Used, among other things, to choose which AI
 // provider (anthropic | gemini) each module uses. Keys are namespaced, e.g.
@@ -636,4 +742,169 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")
+}
+
+// ─── Home ───────────────────────────────────────────────────────────────────
+// Caches the daily "sector news" web search shown on the Home dashboard so it's
+// only generated once per day (one row per UTC date "YYYY-MM-DD").
+model HomeNewsCache {
+  id       String @id @default(cuid())
+  date     String @unique // "YYYY-MM-DD" (UTC)
+  items    Json // HomeNewsItem[]
+  provider String
+  model    String
+
+  createdAt DateTime @default(now())
+
+  @@map("home_news_cache")
+}
+
+// ─── Outreach Agent ────────────────────────────────────────────────────────
+// Secuencia de seguimiento comercial (varios correos con distinto ángulo)
+// generada a partir del análisis y la propuesta ya existentes para un negocio.
+model AiOutreachSequence {
+  id String @id @default(cuid())
+
+  model        String // Modelo de IA usado
+  placeId      String // Google Places ID del negocio (PlaceCache/BusinessAnalysis)
+  businessName String
+
+  context String @db.Text // Resumen usado como input (snapshot)
+  steps   Json // { stepNumber, delayDays, angle, subject, body }[]
+
+  rawOutput Json?
+
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_outreach_sequences")
+}
+
+// ─── Competitor Radar ──────────────────────────────────────────────────────
+// Informe de competidores cercanos generado con búsqueda web. 1:1 por negocio
+// (placeId); volver a generarlo sobrescribe el informe anterior.
+model CompetitorRadarReport {
+  id String @id @default(cuid())
+
+  placeId      String @unique
+  businessName String
+  model        String
+
+  competitors Json // { name, website?, strengths[], weaknesses[] }[]
+  gaps        Json // string[] — huecos de mercado detectados
+  summary     String @db.Text
+
+  sources   Json? // { title, url }[] — fuentes citadas por la búsqueda web
+  rawOutput Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("competitor_radar_reports")
+}
+
+// ─── Call Prep Agent ───────────────────────────────────────────────────────
+// Guión de llamada/reunión generado a partir de una propuesta comercial ya
+// redactada (AiProposal). 1:1 con AiProposal.
+model AiCallScript {
+  id         String @id @default(cuid())
+  proposalId String @unique
+
+  model       String
+  meetingType EmailMeetingType @default(CALL)
+
+  agenda     Json // string[]
+  keyPoints  Json // string[]
+  objections Json // { objection, response }[]
+  questions  Json // string[] — preguntas de descubrimiento
+  nextSteps  Json // string[]
+
+  rawOutput Json?
+
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposal AiProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@map("ai_call_scripts")
+}
+
+// ─── Content/SEO Agent ─────────────────────────────────────────────────────
+// Plan de contenido (ideas de posts + copy de landing) para un negocio
+// analizado, apoyado en los hallazgos del web audit del Rastreador. 1:1 por
+// negocio (placeId); volver a generarlo sobrescribe el plan anterior.
+model AiContentPlan {
+  id String @id @default(cuid())
+
+  placeId      String @unique
+  businessName String
+  model        String
+
+  topics      Json // { title, angle, keywords[], format }[]
+  landingCopy Json // { headline, subheadline, ctaLabel, bullets[] }
+  seoNotes    Json // string[] — basado en PlaceCache.webAudit.issues
+
+  rawOutput Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_content_plans")
+}
+
+// ─── SEO Audit ──────────────────────────────────────────────────────────────
+// Auditoría SEO profesional de una URL (de un negocio del CRM o cualquier
+// web). Combina datos técnicos extraídos por fetch directo + un informe
+// elaborado generado por IA (categorías, hallazgos, quick wins, keywords).
+model AiSeoAudit {
+  id String @id @default(cuid())
+
+  url          String
+  finalUrl     String?
+  businessName String?
+  model        String
+
+  technical Json // SeoTechnicalData — datos extraídos del fetch
+  report    Json // SeoReportOutput — informe elaborado por IA
+  score     Int // 0-100, score técnico calculado
+
+  rawOutput Json?
+
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_seo_audits")
+}
+
+// ─── Transcript Analyzer ───────────────────────────────────────────────────
+// Análisis de una transcripción de llamada/reunión pegada por el usuario:
+// resumen, requisitos, objeciones, próximos pasos y sentimiento general.
+model AiTranscriptAnalysis {
+  id String @id @default(cuid())
+
+  model        String
+  businessName String?
+
+  transcript String @db.Text
+  summary    String @db.Text
+
+  requirements Json // string[]
+  objections   Json // { objection, response? }[]
+  actionItems  Json // string[]
+  sentiment    String // "positive" | "neutral" | "negative"
+
+  rawOutput Json?
+
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_transcript_analyses")
 }

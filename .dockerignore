@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.gitignore
+npm-debug.log*
+.env
+.env.*
+!.env.production.example
+.DS_Store
+*.tsbuildinfo
+README.md
+DEPLOY.md
+docs
+nginx/certbot
+coverage
+.vercel
