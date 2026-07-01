@@ -53,7 +53,6 @@ const DEFAULT_FORM: SearchFormValues = {
   locationText: "Madrid",
   placeType: ANALYZER_CATEGORIES[0].placeType,
   radiusMeters: 1000,
-  maxResults: 10,
 };
 
 interface PersistedSession {
@@ -248,7 +247,6 @@ export function AnalyzerView() {
       locationText: form.locationText.trim(),
       placeType: form.placeType,
       radiusMeters: form.radiusMeters,
-      maxResults: form.maxResults,
       ...(clickedPoint ? { coordinates: clickedPoint } : {}),
     };
 

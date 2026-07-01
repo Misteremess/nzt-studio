@@ -329,27 +329,18 @@ export interface NearbySearchResult {
 }
 
 /**
- * Maximum number of extra pages fetched beyond the first when trying to
- * surface places not already in PlaceCache (see `isKnownPlaceId`).
- * Caps the worst-case API cost for broad "Otros" searches.
- */
-const MAX_EXTRA_PAGES = 3;
-
-/**
  * Searches for businesses near a location using Google Places Nearby Search (New).
- * Paginates automatically until `maxResults` are collected or the API has no more pages.
+ * Paginates through ALL available pages until the API has no more results.
  *
  * Each page fetches up to 20 results (Places API hard limit).
- * Requesting >20 results will therefore generate multiple API calls.
+ * When `isKnownPlaceId` is provided, already-cached places are stripped from
+ * the final result so every search surfaces only new discoveries.
  *
  * @param center         - Center of the search circle (lat/lng)
  * @param radiusMeters   - Search radius in meters (capped by ANALYZER_CONFIG.maxRadiusMeters)
  * @param placeType      - Google Places includedTypes value (e.g. "bakery")
- * @param maxResults     - Total results wanted (capped by ANALYZER_CONFIG.maxResults)
- * @param isKnownPlaceId - Optional lookup for placeIds already in PlaceCache. When
- *                         provided, extra pages (up to MAX_EXTRA_PAGES) are fetched
- *                         while there aren't enough "new" places yet, and the final
- *                         result prioritizes places not seen before.
+ * @param isKnownPlaceId - Lookup for placeIds already in PlaceCache; matching
+ *                         places are excluded from the returned result.
  *
  * @throws PlacesApiError on any failure
  */
@@ -357,21 +348,17 @@ export async function searchNearby(
   center: PlaceLocation,
   radiusMeters: number,
   placeType: string,
-  maxResults = ANALYZER_CONFIG.maxResults,
   isKnownPlaceId?: (placeIds: string[]) => Promise<Set<string>>
 ): Promise<NearbySearchResult> {
   const key = getKey();
   const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
-  const totalWanted = Math.min(maxResults, ANALYZER_CONFIG.maxResults);
 
   const allPlaces: PlaceSummary[] = [];
   const allRaw: RawPlace[] = [];
   let pageToken: string | undefined;
-  let pagesFetched = 0;
 
   // maxResultCount must be IDENTICAL on every page — Places API (New) rejects
   // paginated requests where any parameter differs from the first request.
-  // Always request a full page of 20; slice to totalWanted after the loop.
   const pageSize = PLACES_API_MAX_PER_PAGE;
 
   do {
@@ -424,45 +411,26 @@ export async function searchNearby(
     allRaw.push(...validPage);
 
     pageToken = data.nextPageToken;
-    pagesFetched++;
 
     // API returned fewer results than the page cap — no more pages available
     if (rawPage.length < pageSize) break;
-
-    if (!pageToken) break;
-
-    if (isKnownPlaceId) {
-      // Keep paginating while there aren't enough "new" places yet, up to
-      // MAX_EXTRA_PAGES extra pages.
-      if (pagesFetched > MAX_EXTRA_PAGES) break;
-      const known = await isKnownPlaceId(allPlaces.map((p) => p.placeId));
-      const newCount = allPlaces.length - known.size;
-      if (newCount >= totalWanted) break;
-    } else if (allPlaces.length >= totalWanted) {
-      break;
-    }
   } while (pageToken);
 
-  // No dedup info available — return the first totalWanted results as before
-  if (!isKnownPlaceId || allPlaces.length <= totalWanted) {
-    return {
-      places: allPlaces.slice(0, totalWanted),
-      rawPlaces: allRaw.slice(0, totalWanted),
-    };
+  // Filter out places already in PlaceCache so each search returns new discoveries.
+  if (isKnownPlaceId && allPlaces.length > 0) {
+    const known = await isKnownPlaceId(allPlaces.map((p) => p.placeId));
+    const newPlaces: PlaceSummary[] = [];
+    const newRaw: RawPlace[] = [];
+    allPlaces.forEach((p, i) => {
+      if (!known.has(p.placeId)) {
+        newPlaces.push(p);
+        newRaw.push(allRaw[i]);
+      }
+    });
+    return { places: newPlaces, rawPlaces: newRaw };
   }
 
-  // Prioritize places not already in PlaceCache, preserving relative order
-  // within each group, so the results cap is spent on new discoveries first.
-  const known = await isKnownPlaceId(allPlaces.map((p) => p.placeId));
-  const newIdx: number[] = [];
-  const knownIdx: number[] = [];
-  allPlaces.forEach((p, i) => (known.has(p.placeId) ? knownIdx : newIdx).push(i));
-  const order = [...newIdx, ...knownIdx].slice(0, totalWanted);
-
-  return {
-    places: order.map((i) => allPlaces[i]),
-    rawPlaces: order.map((i) => allRaw[i]),
-  };
+  return { places: allPlaces, rawPlaces: allRaw };
 }
 
 // ─── Place Details ────────────────────────────────────────────────────────────

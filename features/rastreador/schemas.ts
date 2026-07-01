@@ -46,8 +46,6 @@ export const searchInputSchema = z
         message: "Categoría de negocio no válida",
       }),
 
-    /** How many results to request (1–20). Capped server-side by ANALYZER_CONFIG. */
-    maxResults: z.number().int().min(1).max(20),
   })
   .superRefine((data, ctx) => {
     if (!data.locationText?.trim() && !data.coordinates) {

@@ -152,7 +152,6 @@ export interface AnalyzerSearchInput {
   coordinates?: { latitude: number; longitude: number }; // Alternativa: coordenadas directas
   radiusMeters: number;                                 // 500 | 1000 | 2000 | 2500
   placeType: string;                                    // AnalyzerCategory.placeType
-  maxResults: number;                                   // 5 | 10 | 15 | 20
 }
 
 // ─── Cache record ─────────────────────────────────────────────────────────────

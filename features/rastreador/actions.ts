@@ -85,9 +85,8 @@ export async function searchPlacesAction(
     return { ok: false, error: firstError, errorCode: "INVALID_INPUT" };
   }
 
-  const { locationText, radiusMeters, placeType, maxResults, coordinates } = parsed.data;
+  const { locationText, radiusMeters, placeType, coordinates } = parsed.data;
   const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
-  const cappedResults = Math.min(maxResults, ANALYZER_CONFIG.maxResults);
 
   // 2. Resolve center — use explicit coordinates (map click) or geocode text
   let center: PlaceLocation;
@@ -101,15 +100,14 @@ export async function searchPlacesAction(
     }
   }
 
-  // 3. Search nearby — prioritize places not already in PlaceCache so the
-  //    results cap isn't spent re-surfacing places we've searched before.
+  // 3. Search nearby — exhausts all API pages, returns only places not already
+  //    in PlaceCache so each search surfaces genuinely new discoveries.
   let searchResult: Awaited<ReturnType<typeof searchNearby>>;
   try {
     searchResult = await searchNearby(
       center,
       cappedRadius,
       placeType,
-      cappedResults,
       getCachedPlaceIds
     );
   } catch (err) {

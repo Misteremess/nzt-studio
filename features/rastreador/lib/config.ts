@@ -12,28 +12,10 @@ import "server-only";
  */
 export const PLACES_API_MAX_PER_PAGE = 20;
 
-/**
- * Places API (New) searchNearby practical ceiling.
- * The API returns up to 20 results per request and rarely emits nextPageToken
- * for filtered category searches — pagination is supported in the code but
- * not reliably triggered by the API. 20 is the effective per-request cap.
- */
-const PLACES_API_MAX_TOTAL = 20;
-
 /** Places API (New) absolute max radius in meters */
 const PLACES_API_MAX_RADIUS = 50_000;
 
 export const ANALYZER_CONFIG = {
-  /**
-   * Maximum total places returned per search.
-   * Capped at 20 — the Places API (New) searchNearby hard limit per request.
-   * Override via ANALYZER_MAX_RESULTS env var (max 20).
-   */
-  maxResults: Math.min(
-    parseInt(process.env.ANALYZER_MAX_RESULTS ?? "20", 10) || 20,
-    PLACES_API_MAX_TOTAL
-  ),
-
   /**
    * Maximum search radius in meters.
    * Default: 10 000 m (10 km). Override via ANALYZER_MAX_RADIUS_METERS.

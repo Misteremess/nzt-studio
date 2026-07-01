@@ -4,7 +4,7 @@
 import "server-only";
 
 import { prisma } from "@/db/prisma";
-import { generateText } from "@/lib/ai/provider";
+import { generateText, MissingApiKeyError, AiApiError } from "@/lib/ai/provider";
 import { getModuleProvider } from "@/lib/ai/settings";
 import type { HomeNewsCategory, HomeNewsData, HomeNewsItem } from "@/features/home/types";
 
@@ -131,7 +131,16 @@ export async function getOrRefreshNews(force = false): Promise<HomeNewsData> {
     return { items, generatedAt: row.createdAt.toISOString(), stale: false };
   } catch (err) {
     const latest = await prisma.homeNewsCache.findFirst({ orderBy: { date: "desc" } });
-    const message = err instanceof Error ? err.message : "Error desconocido al generar noticias.";
+    const message =
+      err instanceof MissingApiKeyError
+        ? "La clave de API de IA no está configurada. Configúrala en Ajustes."
+        : err instanceof AiApiError && err.status === 400 && err.message.includes("credit balance")
+          ? "Saldo de créditos de la API agotado. Recarga tu cuenta de Anthropic o Gemini."
+          : err instanceof AiApiError
+            ? "Error de la API de IA al generar noticias. Inténtalo de nuevo más tarde."
+            : err instanceof NewsParseError
+              ? "La IA devolvió un formato inesperado. Inténtalo de nuevo."
+              : "Error al generar noticias. Inténtalo de nuevo.";
     if (latest) {
       return {
         items: latest.items as unknown as HomeNewsItem[],

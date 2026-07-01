@@ -11,7 +11,6 @@ export interface SearchFormValues {
   locationText: string;
   placeType: string;
   radiusMeters: number;
-  maxResults: number;
 }
 
 interface AnalyzerSearchFormProps {
@@ -25,9 +24,6 @@ interface AnalyzerSearchFormProps {
   isLocating?: boolean;
   locationError?: string | null;
 }
-
-// Places API (New) searchNearby hard limit: 20 per request, no reliable pagination.
-const MAX_RESULTS_OPTIONS = [5, 10, 15, 20] as const;
 
 const SELECT_CLASS =
   "h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm text-foreground " +
@@ -45,7 +41,7 @@ export function AnalyzerSearchForm({
   isLocating,
   locationError,
 }: AnalyzerSearchFormProps) {
-  const { locationText, placeType, radiusMeters, maxResults } = values;
+  const { locationText, placeType, radiusMeters } = values;
   const [categoryOpen, setCategoryOpen] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -73,7 +69,6 @@ export function AnalyzerSearchForm({
   const canSubmit = !isSearching && (locationText.trim() !== "" || mapPointActive);
 
   const showLargeAreaWarning = radiusMeters >= 2500;
-  const showCostWarning = maxResults >= 10 || showLargeAreaWarning;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
@@ -182,54 +177,33 @@ export function AnalyzerSearchForm({
         </div>
       </div>
 
-      {/* Radius + Max results — side by side */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Radio</label>
-          <select
-            value={radiusMeters}
-            onChange={(e) => onChange({ radiusMeters: Number(e.target.value) })}
-            className={SELECT_CLASS}
-            disabled={isSearching}
-          >
-            {ANALYZER_RADIUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Resultados</label>
-          <select
-            value={maxResults}
-            onChange={(e) => onChange({ maxResults: Number(e.target.value) })}
-            className={SELECT_CLASS}
-            disabled={isSearching}
-          >
-            {MAX_RESULTS_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n} negocios
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Radius */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Radio de búsqueda</label>
+        <select
+          value={radiusMeters}
+          onChange={(e) => onChange({ radiusMeters: Number(e.target.value) })}
+          className={SELECT_CLASS}
+          disabled={isSearching}
+        >
+          {ANALYZER_RADIUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <Button type="submit" className="w-full" disabled={!canSubmit}>
         {isSearching ? "Buscando..." : "Buscar negocios"}
       </Button>
 
-      {/* Cost / area notice */}
-      {showCostWarning && (
+      {/* Large area notice */}
+      {showLargeAreaWarning && (
         <div className="flex items-start gap-1.5 rounded-md bg-amber-500/5 border border-amber-500/15 px-2.5 py-2">
           <Info className="h-3 w-3 mt-0.5 shrink-0 text-amber-400/70" />
           <p className="text-[11px] text-amber-400/70 leading-relaxed">
-            {showLargeAreaWarning && (
-              <span className="block">Radio ≥ 2,5 km — área amplia.<br /></span>
-            )}
-            1 llamada API · máx. 20 resultados · detalles cacheados 7 días
+            Radio ≥ 2,5 km — la búsqueda puede tardar más y generar varias llamadas a la API.
           </p>
         </div>
       )}
