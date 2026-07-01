@@ -7,4 +7,4 @@ echo "→ Aplicando migraciones de base de datos (prisma migrate deploy)..."
 node_modules/.bin/prisma migrate deploy
 
 echo "→ Iniciando NZT Studio..."
-exec node .next/standalone/server.js
+exec node server.js
