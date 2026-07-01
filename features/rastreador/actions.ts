@@ -15,7 +15,7 @@ import {
 } from "@/features/rastreador/lib/google-places";
 import {
   getPlaceCacheByPlaceId,
-  getCachedPlaceIds,
+
   getCachedOpportunityScores,
   getCachedPlacesNearby,
   upsertPlaceSummaries,
@@ -100,16 +100,12 @@ export async function searchPlacesAction(
     }
   }
 
-  // 3. Search nearby — exhausts all API pages, returns only places not already
-  //    in PlaceCache so each search surfaces genuinely new discoveries.
+  // 3. Grid search — tiles the area with overlapping sub-circles and runs them
+  //    in parallel, then deduplicates by placeId. Returns all businesses found
+  //    regardless of prior cache state; the view merges with session pins.
   let searchResult: Awaited<ReturnType<typeof searchNearby>>;
   try {
-    searchResult = await searchNearby(
-      center,
-      cappedRadius,
-      placeType,
-      getCachedPlaceIds
-    );
+    searchResult = await searchNearby(center, cappedRadius, placeType);
   } catch (err) {
     return placesErrorResult(err);
   }

@@ -329,52 +329,91 @@ export interface NearbySearchResult {
 }
 
 /**
- * Searches for businesses near a location using Google Places Nearby Search (New).
- * Paginates through ALL available pages until the API has no more results.
+ * Places API (New) searchNearby returns at most 20 results per request and
+ * does not reliably paginate for category-filtered searches. To cover the
+ * full target area we tile it with overlapping sub-circles and search each
+ * one independently, then deduplicate the results by placeId.
  *
- * Each page fetches up to 20 results (Places API hard limit).
- * When `isKnownPlaceId` is provided, already-cached places are stripped from
- * the final result so every search surfaces only new discoveries.
- *
- * @param center         - Center of the search circle (lat/lng)
- * @param radiusMeters   - Search radius in meters (capped by ANALYZER_CONFIG.maxRadiusMeters)
- * @param placeType      - Google Places includedTypes value (e.g. "bakery")
- * @param isKnownPlaceId - Lookup for placeIds already in PlaceCache; matching
- *                         places are excluded from the returned result.
- *
- * @throws PlacesApiError on any failure
+ * Grid sizing:
+ *   sub-radius  = min(mainRadius / 2.5, 500 m)
+ *   spacing     = subRadius × 1.7  (≈30 % overlap → no gaps)
+ *   cells       ≤ MAX_GRID_CELLS   (sorted centre-out so densest area first)
  */
-export async function searchNearby(
+const MAX_GRID_CELLS = 20;
+
+function generateSearchGrid(
+  center: PlaceLocation,
+  radiusMeters: number,
+): Array<{ center: PlaceLocation; subRadius: number }> {
+  if (radiusMeters <= 400) {
+    return [{ center, subRadius: radiusMeters }];
+  }
+
+  const subRadius = Math.min(Math.ceil(radiusMeters / 2.5), 500);
+  const spacing = Math.ceil(subRadius * 1.7);
+
+  const latPerMeter = 1 / 111320;
+  const lngPerMeter = 1 / (111320 * Math.cos((center.latitude * Math.PI) / 180));
+
+  // Iterate from centre outward using integer multiples of spacing so that
+  // (0,0) is always the first cell, avoiding the off-by-one that occurred
+  // when the loop started at -radiusMeters.
+  const n = Math.ceil(radiusMeters / spacing);
+  const candidates: Array<{ center: PlaceLocation; subRadius: number; dist: number }> = [];
+
+  for (let i = -n; i <= n; i++) {
+    for (let j = -n; j <= n; j++) {
+      const dy = i * spacing;
+      const dx = j * spacing;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > radiusMeters) continue;
+      candidates.push({
+        center: {
+          latitude: center.latitude + dy * latPerMeter,
+          longitude: center.longitude + dx * lngPerMeter,
+        },
+        subRadius,
+        dist,
+      });
+    }
+  }
+
+  // Sort centre-outward — densest area covered first if we hit MAX_GRID_CELLS.
+  candidates.sort((a, b) => a.dist - b.dist);
+
+  return candidates
+    .slice(0, MAX_GRID_CELLS)
+    .map(({ center: c, subRadius: r }) => ({ center: c, subRadius: r }));
+}
+
+/**
+ * Fetches one sub-circle: calls searchNearby and follows nextPageToken until
+ * the API has no more pages (max 20 per page).
+ */
+async function fetchSubCircle(
   center: PlaceLocation,
   radiusMeters: number,
   placeType: string,
-  isKnownPlaceId?: (placeIds: string[]) => Promise<Set<string>>
-): Promise<NearbySearchResult> {
-  const key = getKey();
-  const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
-
-  const allPlaces: PlaceSummary[] = [];
-  const allRaw: RawPlace[] = [];
+  key: string,
+): Promise<{ places: PlaceSummary[]; rawPlaces: RawPlace[] }> {
+  const places: PlaceSummary[] = [];
+  const rawPlaces: RawPlace[] = [];
   let pageToken: string | undefined;
 
-  // maxResultCount must be IDENTICAL on every page — Places API (New) rejects
-  // paginated requests where any parameter differs from the first request.
-  const pageSize = PLACES_API_MAX_PER_PAGE;
-
   do {
+    // When sending a pageToken the body must contain ONLY the token —
+    // any other field causes an INVALID_ARGUMENT error from the API.
     const body: Record<string, unknown> = pageToken
       ? { pageToken }
       : {
           locationRestriction: {
             circle: {
               center: { latitude: center.latitude, longitude: center.longitude },
-              radius: cappedRadius,
+              radius: radiusMeters,
             },
           },
-          // "Otros" has no Google Places type filter — omit includedTypes to
-          // search across all business types in the area.
           ...(placeType === OTHER_PLACE_TYPE ? {} : { includedTypes: [placeType] }),
-          maxResultCount: pageSize,
+          maxResultCount: PLACES_API_MAX_PER_PAGE,
           languageCode: "es",
         };
 
@@ -398,39 +437,68 @@ export async function searchNearby(
       );
     }
 
-    if (!response.ok) {
-      await handlePlacesHttpError(response);
-    }
+    if (!response.ok) await handlePlacesHttpError(response);
 
     const data = (await response.json()) as RawNearbySearchResponse;
     const rawPage = data.places ?? [];
 
-    // Filter out malformed entries and accumulate
-    const validPage = rawPage.filter((p) => p.id && p.location);
-    allPlaces.push(...validPage.map(toPlaceSummary));
-    allRaw.push(...validPage);
+    const valid = rawPage.filter((p) => p.id && p.location);
+    places.push(...valid.map(toPlaceSummary));
+    rawPlaces.push(...valid);
 
     pageToken = data.nextPageToken;
-
-    // API returned fewer results than the page cap — no more pages available
-    if (rawPage.length < pageSize) break;
+    // Fewer results than the page cap → no more pages for this sub-circle
+    if (rawPage.length < PLACES_API_MAX_PER_PAGE) break;
   } while (pageToken);
 
-  // Filter out places already in PlaceCache so each search returns new discoveries.
-  if (isKnownPlaceId && allPlaces.length > 0) {
-    const known = await isKnownPlaceId(allPlaces.map((p) => p.placeId));
-    const newPlaces: PlaceSummary[] = [];
-    const newRaw: RawPlace[] = [];
-    allPlaces.forEach((p, i) => {
-      if (!known.has(p.placeId)) {
-        newPlaces.push(p);
-        newRaw.push(allRaw[i]);
+  return { places, rawPlaces };
+}
+
+/**
+ * Searches for ALL businesses near a location by tiling the area with
+ * overlapping sub-circles (grid search). Each cell is queried in parallel
+ * and paginates through its own pages. Results are deduplicated by placeId.
+ *
+ * @throws PlacesApiError on any failure (first cell error propagated if all fail)
+ */
+export async function searchNearby(
+  center: PlaceLocation,
+  radiusMeters: number,
+  placeType: string,
+): Promise<NearbySearchResult> {
+  const key = getKey();
+  const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
+  const grid = generateSearchGrid(center, cappedRadius);
+
+  // Fetch all sub-circles in parallel
+  const settled = await Promise.allSettled(
+    grid.map((cell) => fetchSubCircle(cell.center, cell.subRadius, placeType, key))
+  );
+
+  // Deduplicate across grid cells by placeId
+  const seen = new Map<string, { place: PlaceSummary; raw: RawPlace }>();
+  for (const result of settled) {
+    if (result.status !== "fulfilled") continue;
+    const { places, rawPlaces } = result.value;
+    for (let i = 0; i < places.length; i++) {
+      const p = places[i];
+      if (!seen.has(p.placeId)) {
+        seen.set(p.placeId, { place: p, raw: rawPlaces[i] });
       }
-    });
-    return { places: newPlaces, rawPlaces: newRaw };
+    }
   }
 
-  return { places: allPlaces, rawPlaces: allRaw };
+  // If every sub-circle failed, surface the first error
+  if (seen.size === 0) {
+    const firstRejected = settled.find((r) => r.status === "rejected");
+    if (firstRejected?.status === "rejected") throw firstRejected.reason;
+  }
+
+  const entries = Array.from(seen.values());
+  return {
+    places: entries.map((e) => e.place),
+    rawPlaces: entries.map((e) => e.raw),
+  };
 }
 
 // ─── Place Details ────────────────────────────────────────────────────────────
