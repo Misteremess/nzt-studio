@@ -326,6 +326,12 @@ export interface NearbySearchResult {
    * Stored in PlaceCache.rawSearch per record.
    */
   rawPlaces: unknown[];
+  /**
+   * False when the search hit the API-call ceiling with dense sub-regions still
+   * unresolved — i.e. some businesses may be missing. True when the area was
+   * covered exhaustively.
+   */
+  complete: boolean;
 }
 
 // ─── Exhaustive area coverage (global-lattice refinement) ──────────────────────
@@ -348,8 +354,13 @@ export interface NearbySearchResult {
 
 /** Below this cell radius we stop refining (bounds cost in ultra-dense zones). */
 const MIN_CELL_RADIUS = 60;
-/** Hard ceiling on Places API calls per search — bounds worst-case cost/latency. */
-const MAX_API_CALLS = 250;
+/**
+ * Hard ceiling on Places API calls per search — bounds worst-case cost/latency.
+ * Category-filtered searches are sparse and complete well under this; only the
+ * dense "all types" search approaches it. When it is reached the result is
+ * flagged `complete: false` so the UI can tell the user the area was capped.
+ */
+const MAX_API_CALLS = 400;
 /** Requests fired concurrently per wave. */
 const SEARCH_CONCURRENCY = 12;
 
@@ -513,6 +524,7 @@ export async function searchNearby(
 
   let cells: Cell[] = [{ center, radius: cappedRadius }];
   let radius = cappedRadius;
+  let complete = true;
 
   const collect = (_cell: Cell, result: CellResult) => {
     const { places, rawPlaces } = result;
@@ -557,6 +569,9 @@ export async function searchNearby(
         (s) => haversineMeters(c.center, s.center) <= s.radius + radius
       )
     );
+
+    // Still dense regions to drill but no call budget left → capped/incomplete.
+    if (cells.length > 0 && apiCalls >= MAX_API_CALLS) complete = false;
   }
 
   // Only surface an error if we found nothing at all — partial failures in a
@@ -565,7 +580,7 @@ export async function searchNearby(
 
   if (process.env.NODE_ENV !== "production") {
     console.log(
-      `[Rastreador] searchNearby: ${apiCalls} API calls, ${seen.size} businesses (radius ${cappedRadius}m)`
+      `[Rastreador] searchNearby: ${apiCalls} API calls, ${seen.size} businesses, complete=${complete} (radius ${cappedRadius}m)`
     );
   }
 
@@ -573,6 +588,7 @@ export async function searchNearby(
   return {
     places: entries.map((e) => e.place),
     rawPlaces: entries.map((e) => e.raw),
+    complete,
   };
 }
 

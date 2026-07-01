@@ -61,6 +61,11 @@ export interface SearchActionData {
   center: PlaceLocation;
   /** Radius that was actually applied (may be capped by config) */
   radiusMeters: number;
+  /**
+   * False when the area was too dense to cover exhaustively within the API-call
+   * ceiling — some businesses may be missing (narrow the radius for full coverage).
+   */
+  complete: boolean;
 }
 
 /**
@@ -112,7 +117,7 @@ export async function searchPlacesAction(
     return placesErrorResult(err);
   }
 
-  const { places, rawPlaces } = searchResult;
+  const { places, rawPlaces, complete } = searchResult;
 
   // 4. Persist search results (fire-and-forget style error handling)
   //    A cache write failure should not block the UI from seeing results.
@@ -159,7 +164,7 @@ export async function searchPlacesAction(
   // 7. Return
   return {
     ok: true,
-    data: { places: placesWithScores, center, radiusMeters: cappedRadius },
+    data: { places: placesWithScores, center, radiusMeters: cappedRadius, complete },
   };
 }
 

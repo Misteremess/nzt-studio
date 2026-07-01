@@ -8,7 +8,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Loader2, MapPin, Search } from "lucide-react";
+import { Loader2, MapPin, Search, Info } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,7 +20,11 @@ import {
 import { BusinessListItem } from "@/features/rastreador/components/business-list-item";
 import { BusinessDetailPanel } from "@/features/rastreador/components/business-detail-panel";
 import { NewPinsToast } from "@/features/rastreador/components/new-pins-toast";
-import { ANALYZER_CATEGORIES } from "@/features/rastreador/lib/categories";
+import {
+  ANALYZER_CATEGORIES,
+  OTHER_PLACE_TYPE,
+  placeMatchesCategory,
+} from "@/features/rastreador/lib/categories";
 import {
   searchPlacesAction,
   fetchPlaceDetailAction,
@@ -148,12 +152,22 @@ export function AnalyzerView() {
     placesRef.current = places;
   }, [places]);
 
-  // ── Results list filter (by business name) ─────────────────────────────────
+  // ── Result filters ─────────────────────────────────────────────────────────
+  // Category filter drives BOTH the map pins and the list; the name filter
+  // narrows the list further.
+  const [mapCategory, setMapCategory] = useState<string>(OTHER_PLACE_TYPE);
   const [listFilter, setListFilter] = useState("");
+  const [searchComplete, setSearchComplete] = useState(true);
+
+  const categoryFilteredPlaces =
+    mapCategory === OTHER_PLACE_TYPE
+      ? places
+      : places.filter((p) => placeMatchesCategory(p.types, mapCategory));
+
   const visiblePlaces =
     listFilter.trim() === ""
-      ? places
-      : places.filter((p) =>
+      ? categoryFilteredPlaces
+      : categoryFilteredPlaces.filter((p) =>
           p.name.toLowerCase().includes(listFilter.trim().toLowerCase())
         );
 
@@ -242,6 +256,7 @@ export function AnalyzerView() {
     setHasSearched(true);
     setSearchError(null);
     setListFilter("");
+    setMapCategory(OTHER_PLACE_TYPE);
     setSelectedPlaceId(null);
     setDetail(null);
     setSignals(null);
@@ -265,6 +280,7 @@ export function AnalyzerView() {
       const result = await searchPlacesAction(payload);
       if (result.ok) {
         const newCenter = result.data.center;
+        setSearchComplete(result.data.complete);
 
         // Merge with previously-found places so pins already discovered stay
         // on the map across searches, then recompute distances from the new
@@ -454,12 +470,14 @@ export function AnalyzerView() {
 
         {hasSearched && (
           <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {/* Results header: count + name filter (only once results exist) */}
+            {/* Results header: count, category filter + name filter */}
             {!isSearching && !searchError && places.length > 0 && (
               <div className="shrink-0 border-b border-border px-3 pt-3 pb-2 space-y-2">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-medium text-foreground">
-                    {places.length} {places.length === 1 ? "negocio" : "negocios"}
+                    {mapCategory === OTHER_PLACE_TYPE
+                      ? `${places.length} ${places.length === 1 ? "negocio" : "negocios"}`
+                      : `${categoryFilteredPlaces.length} de ${places.length}`}
                   </span>
                   {listFilter.trim() !== "" && (
                     <span className="text-[11px] text-muted-foreground">
@@ -467,6 +485,24 @@ export function AnalyzerView() {
                     </span>
                   )}
                 </div>
+
+                {/* Category filter — drives the map pins and the list */}
+                <select
+                  value={mapCategory}
+                  onChange={(e) => setMapCategory(e.target.value)}
+                  className="h-8 w-full rounded-md border border-input bg-card px-2.5 text-xs text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  aria-label="Filtrar pines por categoría"
+                >
+                  <option value={OTHER_PLACE_TYPE}>Mostrar todas las categorías</option>
+                  {ANALYZER_CATEGORIES.filter((c) => c.placeType !== OTHER_PLACE_TYPE).map(
+                    (c) => (
+                      <option key={c.placeType} value={c.placeType}>
+                        {c.icon} {c.label}
+                      </option>
+                    )
+                  )}
+                </select>
+
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                   <Input
@@ -476,6 +512,14 @@ export function AnalyzerView() {
                     className="h-8 pl-8 text-xs"
                   />
                 </div>
+
+                {!searchComplete && (
+                  <p className="flex items-start gap-1.5 text-[11px] text-amber-400/80 leading-snug">
+                    <Info className="h-3 w-3 mt-0.5 shrink-0" />
+                    Zona muy densa: puede faltar algún negocio. Reduce el radio o
+                    filtra por categoría para cobertura total.
+                  </p>
+                )}
               </div>
             )}
             <CardContent className="flex-1 min-h-0 overflow-y-auto p-2">
@@ -530,7 +574,7 @@ export function AnalyzerView() {
         >
           <NewPinsToast places={newPins} onDismiss={() => setNewPins(null)} />
           <AnalyzerMap
-            places={places}
+            places={categoryFilteredPlaces}
             center={center}
             radiusMeters={form.radiusMeters}
             selectedPlaceId={selectedPlaceId}

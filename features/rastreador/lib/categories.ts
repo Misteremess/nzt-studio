@@ -526,6 +526,16 @@ export function getCategoryLabel(placeType: string): string {
   return getCategoryByType(placeType)?.label ?? placeType;
 }
 
+/**
+ * True if a business (by its Google `types`) belongs to the given category.
+ * Used for client-side map/list filtering. "Todos los negocios" matches all.
+ */
+export function placeMatchesCategory(placeTypes: string[], categoryType: string): boolean {
+  if (categoryType === OTHER_PLACE_TYPE) return true;
+  const wanted = new Set(resolveSearchTypes(categoryType));
+  return placeTypes.some((t) => wanted.has(t));
+}
+
 /** Returns the Company.sector label for a placeType */
 export function getSectorLabel(placeType: string): string {
   return getCategoryByType(placeType)?.sectorLabel ?? "Otro";
