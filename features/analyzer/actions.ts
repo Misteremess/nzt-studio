@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { analyzeBusiness, AnalysisParseError } from "@/features/analyzer/lib/claude";
 import { mapAiError } from "@/lib/ai/action-errors";
 import {
@@ -30,6 +31,7 @@ export type ActionResult<T> =
 export async function analyzeBusinessAction(
   placeId: string
 ): Promise<ActionResult<BusinessAnalysisData>> {
+  await requireSession();
   if (!placeId || typeof placeId !== "string") {
     return { ok: false, error: "Place ID no válido.", errorCode: "INVALID_INPUT" };
   }
@@ -63,6 +65,7 @@ export async function analyzeBusinessAction(
 
 /** Returns all stored analyses (compact) for the Analyzer landing listing. */
 export async function listAnalysesAction(includeArchived = false): Promise<ActionResult<AnalysisListItem[]>> {
+  await requireSession();
   try {
     const analyses = await listAnalyses(includeArchived);
     return { ok: true, data: analyses };
@@ -73,6 +76,7 @@ export async function listAnalysesAction(includeArchived = false): Promise<Actio
 
 /** Archives a BusinessAnalysis so it's hidden from all modules and analytics. */
 export async function archiveAnalysisAction(placeId: string): Promise<ActionResult<void>> {
+  await requireSession();
   if (!placeId) return { ok: false, error: "ID inválido.", errorCode: "INVALID_INPUT" };
   try {
     await archiveAnalysis(placeId);
@@ -85,6 +89,7 @@ export async function archiveAnalysisAction(placeId: string): Promise<ActionResu
 
 /** Restores an archived BusinessAnalysis. */
 export async function restoreAnalysisAction(placeId: string): Promise<ActionResult<void>> {
+  await requireSession();
   if (!placeId) return { ok: false, error: "ID inválido.", errorCode: "INVALID_INPUT" };
   try {
     await restoreAnalysis(placeId);
@@ -97,6 +102,7 @@ export async function restoreAnalysisAction(placeId: string): Promise<ActionResu
 
 /** Permanently deletes a BusinessAnalysis and all cascaded AI records. */
 export async function deleteAnalysisAction(placeId: string): Promise<ActionResult<void>> {
+  await requireSession();
   if (!placeId) return { ok: false, error: "ID inválido.", errorCode: "INVALID_INPUT" };
   try {
     await deleteAnalysis(placeId);
@@ -111,6 +117,7 @@ export async function deleteAnalysisAction(placeId: string): Promise<ActionResul
 export async function getAnalysisAction(
   placeId: string
 ): Promise<ActionResult<BusinessAnalysisData | null>> {
+  await requireSession();
   try {
     const analysis = await getAnalysisByPlaceId(placeId);
     return { ok: true, data: analysis };
@@ -124,6 +131,7 @@ export async function toggleOpportunityAction(
   opportunityId: string,
   selected: boolean
 ): Promise<ActionResult<{ id: string; selected: boolean }>> {
+  await requireSession();
   if (!opportunityId) {
     return { ok: false, error: "Oportunidad no válida.", errorCode: "INVALID_INPUT" };
   }

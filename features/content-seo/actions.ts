@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { ContentSeoParseError, generateContentPlan, generateSeoReport } from "@/features/content-seo/lib/claude";
 import { runSeoPageAudit } from "@/features/content-seo/lib/seo-audit-fetch";
 import { mapAiError } from "@/lib/ai/action-errors";

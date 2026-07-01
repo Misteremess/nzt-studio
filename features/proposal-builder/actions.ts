@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { generateProposal, ProposalParseError } from "@/features/proposal-builder/lib/claude";
 import { mapAiError } from "@/lib/ai/action-errors";
 import {

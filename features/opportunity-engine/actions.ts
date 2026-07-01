@@ -6,6 +6,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { setOpportunitySelected } from "@/features/analyzer/lib/analysis-store";
 import { getEngineData } from "@/features/opportunity-engine/lib/store";
 import type { EngineData } from "@/features/opportunity-engine/types";

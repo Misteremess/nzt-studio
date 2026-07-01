@@ -6,6 +6,7 @@
 // All Google Places API calls and Prisma access happen exclusively here.
 // The API key never leaves the server.
 
+import { requireSession } from "@/lib/auth/require-session";
 import {
   geocodeLocation,
   searchNearby,

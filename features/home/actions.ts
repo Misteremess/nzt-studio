@@ -4,6 +4,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { getOrRefreshNews } from "@/features/home/lib/news";
 import { mapAiError } from "@/lib/ai/action-errors";
 import type { HomeNewsData } from "@/features/home/types";

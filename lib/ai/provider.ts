@@ -109,11 +109,11 @@ async function generateWithAnthropic(opts: GenerateOptions): Promise<GenerateRes
     : undefined;
 
   try {
+    const supportsThinking = model.includes("opus") || model.includes("sonnet");
     const stream = client.messages.stream({
       model,
       max_tokens: opts.maxTokens,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "high" },
+      ...(supportsThinking ? { thinking: { type: "adaptive" }, output_config: { effort: "high" } } : {}),
       system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
       ...(tools ? { tools } : {}),
       messages: [{ role: "user", content: buildAnthropicContent(opts) }],

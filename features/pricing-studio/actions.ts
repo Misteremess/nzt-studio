@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { generatePricing, PricingParseError } from "@/features/pricing-studio/lib/claude";
 import { mapAiError } from "@/lib/ai/action-errors";
 import {

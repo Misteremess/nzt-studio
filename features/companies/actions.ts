@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/db/prisma";
+import { requireSession } from "@/lib/auth/require-session";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ export async function createCompanyAction(
   _prevState: CompanyFormState,
   formData: FormData
 ): Promise<CompanyFormState> {
+  await requireSession();
   const result = companySchema.safeParse(extractFields(formData));
 
   if (!result.success) {
@@ -125,6 +127,7 @@ export async function updateCompanyStatusAction(
   companyId: string,
   status: string
 ): Promise<PipelineActionResult> {
+  await requireSession();
   if (!VALID_STATUSES.includes(status as (typeof VALID_STATUSES)[number])) {
     return { ok: false, error: "Estado no válido." };
   }
@@ -146,6 +149,7 @@ export async function updateCompanyStatusAction(
 export async function registerContactAction(
   companyId: string
 ): Promise<PipelineActionResult> {
+  await requireSession();
   try {
     await prisma.company.update({
       where: { id: companyId },
@@ -164,6 +168,7 @@ export async function updateNextActionAction(
   companyId: string,
   nextAction: string
 ): Promise<PipelineActionResult> {
+  await requireSession();
   const trimmed = nextAction.trim().slice(0, 200);
 
   try {
@@ -184,6 +189,7 @@ export async function updateCompanyAction(
   _prevState: CompanyFormState,
   formData: FormData
 ): Promise<CompanyFormState> {
+  await requireSession();
   const existing = await prisma.company.findUnique({
     where: { id: companyId },
     select: { id: true },

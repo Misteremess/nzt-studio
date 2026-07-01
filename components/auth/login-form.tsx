@@ -91,6 +91,8 @@ export function LoginForm() {
       setPending(false);
       return;
     }
+    setSecret(null);
+    setQrDataUrl(null);
     await doSignIn();
   }
 

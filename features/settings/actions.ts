@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/db/prisma";
+import { requireSession } from "@/lib/auth/require-session";
 import { setAnthropicModel, setModuleProvider } from "@/lib/ai/settings";
 import { AI_MODULES, asAnthropicModel, asProvider, type AiModuleId, type AnthropicModel } from "@/lib/ai/types";
 
@@ -96,6 +97,12 @@ export async function resetApplicationDataAction(
       // Standalone modules
       prisma.aiEmailDraft.deleteMany(),
       prisma.aiAgent.deleteMany(),
+      prisma.aiOutreachSequence.deleteMany(),
+      prisma.competitorRadarReport.deleteMany(),
+      prisma.aiCallScript.deleteMany(),
+      prisma.aiContentPlan.deleteMany(),
+      prisma.aiSeoAudit.deleteMany(),
+      prisma.aiTranscriptAnalysis.deleteMany(),
       prisma.marketResearch.deleteMany(),
       prisma.knowledgeItem.deleteMany(),
       prisma.homeNewsCache.deleteMany(),

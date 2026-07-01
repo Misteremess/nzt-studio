@@ -12,6 +12,7 @@ import "server-only";
 
 import { generateText } from "@/lib/ai/provider";
 import { getModuleProvider } from "@/lib/ai/settings";
+import { isSafePublicUrl } from "@/features/rastreador/lib/web-audit";
 import type { BrandColor, BrandIdentityInput } from "@/features/mvp-factory/types";
 
 /** Thrown when the model output cannot be parsed into the expected shape. */
@@ -74,6 +75,7 @@ export async function extractBrandIdentityFromWebsite(
   websiteUri: string
 ): Promise<ExtractedBrandIdentity> {
   const url = normalizeUrl(websiteUri);
+  if (!isSafePublicUrl(url)) throw new WebsiteUnreachableError("URL no permitida.");
 
   let html: string;
   let finalUrl: string;
@@ -260,6 +262,7 @@ interface DownloadedImage {
 /** Downloads the candidate logo image, returning it only if vision-compatible. */
 async function tryDownloadLogo(logoUrl: string | null): Promise<DownloadedImage | null> {
   if (!logoUrl) return null;
+  if (!isSafePublicUrl(logoUrl)) return null;
   try {
     const response = await fetchWithTimeout(logoUrl, { Accept: "image/*" });
     if (!response.ok) return null;

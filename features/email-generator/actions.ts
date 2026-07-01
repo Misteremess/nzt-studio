@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { EmailParseError, generateEmail } from "@/features/email-generator/lib/claude";
 import { mapAiError } from "@/lib/ai/action-errors";
 import {

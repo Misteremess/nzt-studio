@@ -126,7 +126,7 @@ export async function generateMvpDesignImages(
   const client = getClient();
   const specs = buildImageSpecs(businessName, summary, spec);
 
-  return Promise.all(
+  const results = await Promise.allSettled(
     specs.map(async (s): Promise<MvpDesignImage> => {
       const res = await client.images.generate({
         model: MVP_IMAGE_MODEL,
@@ -140,4 +140,11 @@ export async function generateMvpDesignImages(
       return { id: s.id, label: s.label, b64 };
     })
   );
+
+  const images = results
+    .filter((r): r is PromiseFulfilledResult<MvpDesignImage> => r.status === "fulfilled")
+    .map((r) => r.value);
+
+  if (images.length === 0) throw new ImageGenError("No se pudo generar ninguna imagen.");
+  return images;
 }

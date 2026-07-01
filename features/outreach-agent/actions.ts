@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { generateOutreachSequence, OutreachParseError, regenerateOutreachStep } from "@/features/outreach-agent/lib/claude";
 import { mapAiError } from "@/lib/ai/action-errors";
 import {

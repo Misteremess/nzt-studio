@@ -4,6 +4,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { createAgent, deleteAgent, getAgentData, updateAgent } from "@/features/ai-agents/lib/store";
 import {
   AGENT_CHANNELS,
@@ -49,6 +50,7 @@ function validate(input: unknown): AgentInput | null {
 }
 
 export async function createAgentAction(input: unknown): Promise<ActionResult<AgentData>> {
+  await requireSession();
   const clean = validate(input);
   if (!clean) return { ok: false, error: "Falta el nombre o el canal no es válido.", errorCode: "INVALID_INPUT" };
   try {
@@ -61,6 +63,7 @@ export async function createAgentAction(input: unknown): Promise<ActionResult<Ag
 }
 
 export async function updateAgentAction(id: string, input: unknown): Promise<ActionResult<AgentData>> {
+  await requireSession();
   if (!id) return { ok: false, error: "Agente no válido.", errorCode: "INVALID_INPUT" };
   const clean = validate(input);
   if (!clean) return { ok: false, error: "Falta el nombre o el canal no es válido.", errorCode: "INVALID_INPUT" };
@@ -74,6 +77,7 @@ export async function updateAgentAction(id: string, input: unknown): Promise<Act
 }
 
 export async function deleteAgentAction(id: string): Promise<ActionResult<AgentData>> {
+  await requireSession();
   if (!id) return { ok: false, error: "Agente no válido.", errorCode: "INVALID_INPUT" };
   try {
     await deleteAgent(id);

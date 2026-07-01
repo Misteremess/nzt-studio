@@ -6,6 +6,8 @@
 import { revalidatePath } from "next/cache";
 import OpenAI from "openai";
 
+import { requireSession } from "@/lib/auth/require-session";
+
 import { generateMvpSpec, SpecParseError } from "@/features/mvp-factory/lib/claude";
 import { generateMvpHtmlMockup, HtmlParseError } from "@/features/mvp-factory/lib/html-mockup";
 import {

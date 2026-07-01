@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireSession } from "@/lib/auth/require-session";
 import { CallPrepParseError, generateCallScript } from "@/features/call-prep/lib/claude";
 import { mapAiError } from "@/lib/ai/action-errors";
 import {
@@ -29,6 +30,7 @@ function refresh() {
 
 /** Lists generated proposals eligible for a call script. */
 export async function listCallPrepCandidatesAction(): Promise<ActionResult<CallPrepCandidate[]>> {
+  await requireSession();
   try {
     const candidates = await listCallPrepCandidates();
     return { ok: true, data: candidates };
@@ -39,6 +41,7 @@ export async function listCallPrepCandidatesAction(): Promise<ActionResult<CallP
 
 /** Lists generated call scripts. */
 export async function listCallScriptsAction(includeArchived = false): Promise<ActionResult<CallScriptData[]>> {
+  await requireSession();
   try {
     const scripts = await listCallScripts(includeArchived);
     return { ok: true, data: scripts };
@@ -52,6 +55,7 @@ export async function generateCallScriptAction(
   candidate: CallPrepCandidate,
   meetingType: unknown
 ): Promise<ActionResult<CallScriptData>> {
+  await requireSession();
   if (!candidate?.proposalId || !candidate?.businessName) {
     return { ok: false, error: "Selecciona una propuesta.", errorCode: "INVALID_INPUT" };
   }
@@ -88,6 +92,7 @@ export async function generateCallScriptAction(
 
 /** Archives a call script. */
 export async function archiveCallScriptAction(id: string): Promise<ActionResult<void>> {
+  await requireSession();
   if (!id) return { ok: false, error: "Guión no válido.", errorCode: "INVALID_INPUT" };
   try {
     await archiveCallScript(id);
@@ -100,6 +105,7 @@ export async function archiveCallScriptAction(id: string): Promise<ActionResult<
 
 /** Restores an archived call script. */
 export async function restoreCallScriptAction(id: string): Promise<ActionResult<void>> {
+  await requireSession();
   if (!id) return { ok: false, error: "Guión no válido.", errorCode: "INVALID_INPUT" };
   try {
     await restoreCallScript(id);
@@ -112,6 +118,7 @@ export async function restoreCallScriptAction(id: string): Promise<ActionResult<
 
 /** Permanently deletes a call script. */
 export async function deleteCallScriptAction(id: string): Promise<ActionResult<void>> {
+  await requireSession();
   if (!id) return { ok: false, error: "Guión no válido.", errorCode: "INVALID_INPUT" };
   try {
     await deleteCallScript(id);

@@ -127,6 +127,18 @@ export class PlacesApiError extends Error {
   }
 }
 
+function getKey(): string {
+  try {
+    return requirePlacesApiKey();
+  } catch {
+    throw new PlacesApiError(
+      "GOOGLE_PLACES_API_KEY is not configured",
+      "MISSING_KEY",
+      "La clave de API de Google Places no está configurada. Contacta al administrador."
+    );
+  }
+}
+
 // ─── Normalization helpers ─────────────────────────────────────────────────────
 
 function normalizeBusinessStatus(raw?: string): PlaceBusinessStatus {
@@ -244,7 +256,7 @@ async function handlePlacesHttpError(response: Response): Promise<never> {
  * @throws PlacesApiError on any failure
  */
 export async function geocodeLocation(locationText: string): Promise<PlaceLocation> {
-  const key = requirePlacesApiKey();
+  const key = getKey();
 
   const url = new URL(GEOCODING_BASE);
   url.searchParams.set("address", locationText);
@@ -348,7 +360,7 @@ export async function searchNearby(
   maxResults = ANALYZER_CONFIG.maxResults,
   isKnownPlaceId?: (placeIds: string[]) => Promise<Set<string>>
 ): Promise<NearbySearchResult> {
-  const key = requirePlacesApiKey();
+  const key = getKey();
   const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
   const totalWanted = Math.min(maxResults, ANALYZER_CONFIG.maxResults);
 
@@ -470,7 +482,7 @@ export interface PlaceDetailResult {
  * @throws PlacesApiError on any failure
  */
 export async function fetchPlaceDetail(placeId: string): Promise<PlaceDetailResult> {
-  const key = requirePlacesApiKey();
+  const key = getKey();
 
   let response: Response;
   try {
