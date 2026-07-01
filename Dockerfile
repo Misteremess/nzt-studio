@@ -12,7 +12,7 @@ RUN apk add --no-cache libc6-compat openssl
 # `prisma generate`, que necesita prisma/schema.prisma presente.
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
-RUN npm ci
+RUN npm install
 
 # Código fuente y build.
 COPY . .
