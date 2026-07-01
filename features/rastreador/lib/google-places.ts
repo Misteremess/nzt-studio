@@ -412,7 +412,7 @@ interface CellResult {
 /** Single searchNearby request for one cell, ranked by DISTANCE. */
 async function fetchCell(
   cell: Cell,
-  placeType: string,
+  includedTypes: string[],
   key: string,
 ): Promise<CellResult> {
   const body: Record<string, unknown> = {
@@ -422,7 +422,9 @@ async function fetchCell(
         radius: cell.radius,
       },
     },
-    ...(placeType === OTHER_PLACE_TYPE ? {} : { includedTypes: [placeType] }),
+    // Empty list → unfiltered (all business types). Otherwise a place matches if
+    // ANY of its Google types is in the list, so hybrids are captured.
+    ...(includedTypes.length > 0 ? { includedTypes } : {}),
     // DISTANCE ranking is what makes exhaustive coverage provable (see header).
     rankPreference: "DISTANCE",
     maxResultCount: PLACES_API_MAX_PER_PAGE,
@@ -465,7 +467,7 @@ async function fetchCell(
 /** Runs a batch of cells in concurrency-limited waves. */
 async function runCells(
   cells: Cell[],
-  placeType: string,
+  includedTypes: string[],
   key: string,
   callBudget: number,
   onResult: (cell: Cell, result: CellResult) => void,
@@ -477,7 +479,7 @@ async function runCells(
     const wave = cells.slice(start, start + Math.min(SEARCH_CONCURRENCY, room));
     used += wave.length;
     const settled = await Promise.allSettled(
-      wave.map((cell) => fetchCell(cell, placeType, key))
+      wave.map((cell) => fetchCell(cell, includedTypes, key))
     );
     settled.forEach((res, i) => {
       if (res.status === "fulfilled") onResult(wave[i], res.value);
@@ -488,18 +490,19 @@ async function runCells(
 }
 
 /**
- * Searches for ALL businesses of the given type within `radiusMeters` of
- * `center`. Starts with the full circle and, using DISTANCE ranking, refines
- * only the saturated sub-regions with a progressively finer global lattice
- * until nothing is saturated (complete) or the min cell size / call ceiling is
- * reached. Results are deduplicated by placeId and clipped to `radiusMeters`.
+ * Searches for ALL businesses matching `includedTypes` within `radiusMeters` of
+ * `center` (empty list = all business types). Starts with the full circle and,
+ * using DISTANCE ranking, refines only the saturated sub-regions with a
+ * progressively finer global lattice until nothing is saturated (complete) or
+ * the min cell size / call ceiling is reached. Results are deduplicated by
+ * placeId and clipped to `radiusMeters`.
  *
  * @throws PlacesApiError if the very first request fails (found nothing at all).
  */
 export async function searchNearby(
   center: PlaceLocation,
   radiusMeters: number,
-  placeType: string,
+  includedTypes: string[],
 ): Promise<NearbySearchResult> {
   const key = getKey();
   const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
@@ -525,7 +528,7 @@ export async function searchNearby(
     const saturatedParents: Cell[] = [];
     apiCalls += await runCells(
       cells,
-      placeType,
+      includedTypes,
       key,
       MAX_API_CALLS - apiCalls,
       (cell, result) => {
@@ -544,11 +547,15 @@ export async function searchNearby(
     if (nextRadius < MIN_CELL_RADIUS) break; // finest resolution reached
 
     radius = nextRadius;
-    // Refine only where it was dense: keep lattice cells whose centre falls
-    // inside a saturated parent circle.
+    // Refine only where it was dense. Keep a finer cell if its centre lies
+    // within (parentRadius + cellRadius) of a saturated parent — the extra
+    // cellRadius margin ensures cells covering the parent's EDGE annulus are
+    // retained, otherwise businesses at a saturated cell's rim would be lost.
     const candidate = latticeCells(center, cappedRadius, radius);
     cells = candidate.filter((c) =>
-      saturatedParents.some((s) => haversineMeters(c.center, s.center) <= s.radius)
+      saturatedParents.some(
+        (s) => haversineMeters(c.center, s.center) <= s.radius + radius
+      )
     );
   }
 

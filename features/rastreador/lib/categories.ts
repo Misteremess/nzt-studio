@@ -32,6 +32,17 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
     label: "Panadería / Pastelería",
     icon: "🥐",
     placeType: "bakery",
+    // Híbridos frecuentes: pastelería-cafetería, obrador con degustación, etc.
+    searchTypes: [
+      "bakery",
+      "cafe",
+      "coffee_shop",
+      "dessert_shop",
+      "dessert_restaurant",
+      "donut_shop",
+      "chocolate_shop",
+      "candy_store",
+    ],
     sectorLabel: "Alimentación",
     opportunityHints: [
       "Web con carta y encargos",
@@ -43,6 +54,15 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
     label: "Restaurante",
     icon: "🍽️",
     placeType: "restaurant",
+    searchTypes: [
+      "restaurant",
+      "meal_takeaway",
+      "meal_delivery",
+      "diner",
+      "fast_food_restaurant",
+      "brunch_restaurant",
+      "breakfast_restaurant",
+    ],
     sectorLabel: "Hostelería",
     opportunityHints: [
       "Carta digital actualizable",
@@ -54,6 +74,14 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
     label: "Cafetería",
     icon: "☕",
     placeType: "cafe",
+    searchTypes: [
+      "cafe",
+      "coffee_shop",
+      "bakery",
+      "tea_house",
+      "breakfast_restaurant",
+      "dessert_shop",
+    ],
     sectorLabel: "Hostelería",
     opportunityHints: [
       "Carta o menú digital",
@@ -65,6 +93,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
     label: "Bar / Pub",
     icon: "🍺",
     placeType: "bar",
+    searchTypes: ["bar", "pub", "wine_bar", "bar_and_grill"],
     sectorLabel: "Hostelería",
     opportunityHints: [
       "Carta digital con QR",
@@ -76,6 +105,7 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
     label: "Heladería",
     icon: "🍦",
     placeType: "ice_cream_shop",
+    searchTypes: ["ice_cream_shop", "dessert_shop", "cafe"],
     sectorLabel: "Hostelería",
     opportunityHints: [
       "Carta digital de sabores",
@@ -477,6 +507,18 @@ export const ANALYZER_CATEGORIES: AnalyzerCategory[] = [
 /** Find a category by its Google Places type value */
 export function getCategoryByType(placeType: string): AnalyzerCategory | undefined {
   return ANALYZER_CATEGORIES.find((c) => c.placeType === placeType);
+}
+
+/**
+ * Resolves the list of Google Places `includedTypes` to send to the API for a
+ * given category placeType. Returns an empty array for "Todos los negocios",
+ * which the caller translates into an unfiltered (all-types) search.
+ */
+export function resolveSearchTypes(placeType: string): string[] {
+  if (placeType === OTHER_PLACE_TYPE) return [];
+  const category = getCategoryByType(placeType);
+  if (!category) return [placeType];
+  return category.searchTypes ?? [category.placeType];
 }
 
 /** Returns the visible label for a placeType, or the raw type as fallback */

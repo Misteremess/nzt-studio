@@ -29,7 +29,7 @@ import { runWebAudit } from "@/features/rastreador/lib/web-audit";
 import { isCacheValid, ANALYZER_CONFIG } from "@/features/rastreador/lib/config";
 import { computeSignalsAndOpportunities } from "@/features/rastreador/lib/opportunity-rules";
 import { searchInputSchema, fetchDetailInputSchema } from "@/features/rastreador/schemas";
-import { getSectorLabel } from "@/features/rastreador/lib/categories";
+import { getSectorLabel, resolveSearchTypes } from "@/features/rastreador/lib/categories";
 import { prisma } from "@/db/prisma";
 import { revalidatePath } from "next/cache";
 import type {
@@ -100,12 +100,14 @@ export async function searchPlacesAction(
     }
   }
 
-  // 3. Grid search — tiles the area with overlapping sub-circles and runs them
-  //    in parallel, then deduplicates by placeId. Returns all businesses found
-  //    regardless of prior cache state; the view merges with session pins.
+  // 3. Exhaustive search — DISTANCE-ranked lattice refinement. The category is
+  //    expanded to all its related Google types (empty = all types) so hybrid
+  //    businesses aren't missed. Deduplicated by placeId; the view merges with
+  //    session pins.
+  const includedTypes = resolveSearchTypes(placeType);
   let searchResult: Awaited<ReturnType<typeof searchNearby>>;
   try {
-    searchResult = await searchNearby(center, cappedRadius, placeType);
+    searchResult = await searchNearby(center, cappedRadius, includedTypes);
   } catch (err) {
     return placesErrorResult(err);
   }

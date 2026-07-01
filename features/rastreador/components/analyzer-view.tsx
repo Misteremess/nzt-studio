@@ -8,10 +8,11 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Loader2, MapPin } from "lucide-react";
+import { Loader2, MapPin, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   AnalyzerSearchForm,
   type SearchFormValues,
@@ -147,6 +148,15 @@ export function AnalyzerView() {
     placesRef.current = places;
   }, [places]);
 
+  // ── Results list filter (by business name) ─────────────────────────────────
+  const [listFilter, setListFilter] = useState("");
+  const visiblePlaces =
+    listFilter.trim() === ""
+      ? places
+      : places.filter((p) =>
+          p.name.toLowerCase().includes(listFilter.trim().toLowerCase())
+        );
+
   // ── Transitions ───────────────────────────────────────────────────────────
   const [isSearching, startSearch] = useTransition();
   const [isLoadingDetail, startLoadDetail] = useTransition();
@@ -231,6 +241,7 @@ export function AnalyzerView() {
   function handleSearch() {
     setHasSearched(true);
     setSearchError(null);
+    setListFilter("");
     setSelectedPlaceId(null);
     setDetail(null);
     setSignals(null);
@@ -443,11 +454,38 @@ export function AnalyzerView() {
 
         {hasSearched && (
           <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            {/* Results header: count + name filter (only once results exist) */}
+            {!isSearching && !searchError && places.length > 0 && (
+              <div className="shrink-0 border-b border-border px-3 pt-3 pb-2 space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-medium text-foreground">
+                    {places.length} {places.length === 1 ? "negocio" : "negocios"}
+                  </span>
+                  {listFilter.trim() !== "" && (
+                    <span className="text-[11px] text-muted-foreground">
+                      {visiblePlaces.length} coinciden
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={listFilter}
+                    onChange={(e) => setListFilter(e.target.value)}
+                    placeholder="Filtrar por nombre..."
+                    className="h-8 pl-8 text-xs"
+                  />
+                </div>
+              </div>
+            )}
             <CardContent className="flex-1 min-h-0 overflow-y-auto p-2">
               {isSearching ? (
-                <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Buscando negocios...</span>
+                  <span className="text-sm">Rastreando toda la zona...</span>
+                  <span className="text-[11px] opacity-70 text-center px-4">
+                    Barremos el área en detalle para no dejarnos ningún negocio.
+                  </span>
                 </div>
               ) : searchError ? (
                 <p className="text-sm text-rose-400 text-center px-2 py-8">{searchError}</p>
@@ -456,9 +494,14 @@ export function AnalyzerView() {
                   <MapPin className="h-6 w-6 opacity-30" />
                   <p className="text-sm text-center">Sin resultados en esta área.</p>
                 </div>
+              ) : visiblePlaces.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
+                  <Search className="h-6 w-6 opacity-30" />
+                  <p className="text-sm text-center">Ningún negocio coincide con «{listFilter}».</p>
+                </div>
               ) : (
                 <div className="space-y-0.5">
-                  {places.map((place) => (
+                  {visiblePlaces.map((place) => (
                     <BusinessListItem
                       key={place.placeId}
                       place={place}

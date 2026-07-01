@@ -141,7 +141,14 @@ export interface DetectedOpportunity {
 export interface AnalyzerCategory {
   label: string;              // Texto visible en el dropdown
   icon: string;               // Emoji representativo de la categoría
-  placeType: string;          // Valor de includedTypes para Places API (New)
+  placeType: string;          // Identificador de la categoría (y tipo Places principal)
+  /**
+   * Tipos de Google Places (New) usados en la búsqueda. Muchos negocios son
+   * híbridos (p. ej. una pastelería-cafetería puede estar clasificada solo como
+   * `cafe`), así que incluir varios tipos relacionados evita perderlos. Si se
+   * omite, se usa `[placeType]`.
+   */
+  searchTypes?: string[];
   sectorLabel: string;        // Mapea a Company.sector al guardar como candidata
   opportunityHints: string[]; // Oportunidades típicas para orientar al usuario
 }

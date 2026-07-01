@@ -9,6 +9,11 @@ import { HomeView } from "@/features/home/components/home-view";
 import { NewsCardServer } from "@/features/home/components/news-card-server";
 import { NewsCardSkeleton } from "@/features/home/components/news-card-skeleton";
 
+// Per-user, session-gated page whose news card performs a live AI web search.
+// Force dynamic so it renders on request and is never prerendered at build time
+// (a slow news call must never be able to break the production build).
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const data = await getHomeData();
 
