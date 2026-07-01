@@ -48,6 +48,20 @@ export function isCacheValid(
 }
 
 /**
+ * Master kill switch for the Rastreador's Google Places usage.
+ *
+ * Every billable Places/Geocoding call goes through getKey() in
+ * google-places.ts, which refuses to run unless this returns true. It is
+ * DISABLED by default and only turns on when RASTREADOR_ENABLED="true" is set
+ * in the environment — a safe default so the module can never silently rack up
+ * API charges. Re-enable it only after setting a hard quota cap on the Places
+ * API in Google Cloud Console.
+ */
+export function isPlacesApiEnabled(): boolean {
+  return process.env.RASTREADOR_ENABLED === "true";
+}
+
+/**
  * Validates that the Google Places API key is configured.
  * Throws if missing so the caller can return a clear error to the user.
  */

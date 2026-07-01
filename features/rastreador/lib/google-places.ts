@@ -5,8 +5,7 @@
 // server-only modules. The API key is never exposed to the browser.
 import "server-only";
 
-import { requirePlacesApiKey, ANALYZER_CONFIG, PLACES_API_MAX_PER_PAGE } from "@/features/rastreador/lib/config";
-import { OTHER_PLACE_TYPE } from "@/features/rastreador/lib/categories";
+import { requirePlacesApiKey, isPlacesApiEnabled, ANALYZER_CONFIG, PLACES_API_MAX_PER_PAGE } from "@/features/rastreador/lib/config";
 import type { PlaceLocation, PlaceSummary, PlaceDetail, PlaceBusinessStatus } from "@/features/rastreador/types";
 
 // ─── API constants ─────────────────────────────────────────────────────────────
@@ -105,6 +104,7 @@ interface RawPlacesApiError {
 // ─── Error class ──────────────────────────────────────────────────────────────
 
 export type PlacesApiErrorCode =
+  | "DISABLED"
   | "MISSING_KEY"
   | "INVALID_KEY"
   | "API_NOT_ENABLED"
@@ -128,6 +128,16 @@ export class PlacesApiError extends Error {
 }
 
 function getKey(): string {
+  // Master kill switch — no billable Places/Geocoding call happens while the
+  // Rastreador is paused. This is the single choke point for all three
+  // API-calling functions (geocode, searchNearby, fetchPlaceDetail).
+  if (!isPlacesApiEnabled()) {
+    throw new PlacesApiError(
+      "Rastreador Places API is disabled (RASTREADOR_ENABLED != 'true')",
+      "DISABLED",
+      "El Rastreador está pausado temporalmente para evitar gasto en la API de Google. Se reactivará cuando se configure un límite de cuota en Google Cloud."
+    );
+  }
   try {
     return requirePlacesApiKey();
   } catch {

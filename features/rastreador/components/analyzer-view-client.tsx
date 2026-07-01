@@ -21,6 +21,6 @@ const AnalyzerView = dynamic(
   }
 );
 
-export function AnalyzerViewClient() {
-  return <AnalyzerView />;
+export function AnalyzerViewClient({ disabled }: { disabled?: boolean }) {
+  return <AnalyzerView disabled={disabled} />;
 }

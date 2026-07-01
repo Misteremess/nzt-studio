@@ -97,7 +97,7 @@ function readPersistedSession(): PersistedSession | null {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function AnalyzerView() {
+export function AnalyzerView({ disabled = false }: { disabled?: boolean }) {
   // Read once, synchronously, on first render — see readPersistedSession().
   const [initialSession] = useState(readPersistedSession);
   const hadSession = initialSession !== null;
@@ -452,6 +452,15 @@ export function AnalyzerView() {
     <div className="flex gap-4 h-full w-full overflow-hidden">
       {/* ── Left column: search form + results list ────────────────── */}
       <div className="w-80 shrink-0 flex flex-col gap-3 min-h-0">
+        {disabled && (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-600 dark:text-amber-400">
+            <p className="font-medium">Rastreador pausado</p>
+            <p className="mt-1 text-amber-600/80 dark:text-amber-400/80">
+              Las búsquedas están desactivadas temporalmente para evitar gasto en la API de Google.
+              Se reactivará cuando se configure un límite de cuota.
+            </p>
+          </div>
+        )}
         <Card>
           <CardContent className="p-4">
             <AnalyzerSearchForm
