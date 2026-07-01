@@ -328,140 +328,173 @@ export interface NearbySearchResult {
   rawPlaces: unknown[];
 }
 
+// ─── Exhaustive area coverage (global-lattice refinement) ──────────────────────
+//
+// The Places API (New) searchNearby returns at most 20 results per request and
+// has NO pagination (unlike Text Search). A single circle can therefore never
+// surface more than 20 businesses no matter how many exist.
+//
+// To search an area EXHAUSTIVELY we use `rankPreference: DISTANCE`: results come
+// back nearest-first, so a circle that returns FEWER than 20 results is provably
+// complete — there are no more businesses within it. Circles that return the
+// full 20 may be hiding more, so we refine ONLY those regions with a finer grid
+// and repeat until no circle is saturated (or we hit the min cell size / call
+// ceiling).
+//
+// The refinement grid is a global square lattice (spacing = r·√2, which exactly
+// tiles the plane with radius-r circles) anchored at the original centre, so
+// cells never overlap-search across refinement passes — only genuinely dense
+// sub-regions get drilled down, keeping the API-call count low.
+
+/** Below this cell radius we stop refining (bounds cost in ultra-dense zones). */
+const MIN_CELL_RADIUS = 60;
+/** Hard ceiling on Places API calls per search — bounds worst-case cost/latency. */
+const MAX_API_CALLS = 250;
+/** Requests fired concurrently per wave. */
+const SEARCH_CONCURRENCY = 12;
+
+interface Cell {
+  center: PlaceLocation;
+  radius: number;
+}
+
 /**
- * Places API (New) searchNearby returns at most 20 results per request and
- * does not reliably paginate for category-filtered searches. To cover the
- * full target area we tile it with overlapping sub-circles and search each
- * one independently, then deduplicate the results by placeId.
- *
- * Grid sizing:
- *   sub-radius  = min(mainRadius / 2.5, 500 m)
- *   spacing     = subRadius × 1.7  (≈30 % overlap → no gaps)
- *   cells       ≤ MAX_GRID_CELLS   (sorted centre-out so densest area first)
+ * Generates a global square lattice of radius-`r` circles that fully covers the
+ * disk of radius `areaRadius` around `origin`. Spacing is r·√2 — the exact step
+ * at which radius-r circles tile the plane with no gaps. Anchoring every pass at
+ * `origin` keeps lattices aligned across refinement levels, so refined cells
+ * from different saturated parents coincide instead of overlap-searching.
  */
-const MAX_GRID_CELLS = 30;
-
-function generateSearchGrid(
-  center: PlaceLocation,
-  radiusMeters: number,
-): Array<{ center: PlaceLocation; subRadius: number }> {
-  if (radiusMeters <= 400) {
-    return [{ center, subRadius: radiusMeters }];
-  }
-
-  const subRadius = Math.min(Math.ceil(radiusMeters / 2.5), 500);
-  // Cap spacing at R/2 so the second ring of cells always fits inside the
-  // main circle. Without this cap, small radii only produce one ring (9 cells).
-  const spacing = Math.min(Math.ceil(subRadius * 1.5), Math.ceil(radiusMeters / 2));
-
+function latticeCells(origin: PlaceLocation, areaRadius: number, r: number): Cell[] {
+  const spacing = r * Math.SQRT2;
   const latPerMeter = 1 / 111320;
-  const lngPerMeter = 1 / (111320 * Math.cos((center.latitude * Math.PI) / 180));
+  const lngPerMeter = 1 / (111320 * Math.cos((origin.latitude * Math.PI) / 180));
+  const reach = areaRadius + r;
+  const n = Math.ceil(reach / spacing);
 
-  // Iterate from centre outward using integer multiples of spacing so that
-  // (0,0) is always the first cell, avoiding the off-by-one that occurred
-  // when the loop started at -radiusMeters.
-  const n = Math.ceil(radiusMeters / spacing);
-  const candidates: Array<{ center: PlaceLocation; subRadius: number; dist: number }> = [];
-
+  const cells: Cell[] = [];
   for (let i = -n; i <= n; i++) {
     for (let j = -n; j <= n; j++) {
       const dy = i * spacing;
       const dx = j * spacing;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > radiusMeters) continue;
-      candidates.push({
+      if (Math.sqrt(dx * dx + dy * dy) > reach) continue;
+      cells.push({
         center: {
-          latitude: center.latitude + dy * latPerMeter,
-          longitude: center.longitude + dx * lngPerMeter,
+          latitude: origin.latitude + dy * latPerMeter,
+          longitude: origin.longitude + dx * lngPerMeter,
         },
-        subRadius,
-        dist,
+        radius: r,
       });
     }
   }
-
-  // Sort centre-outward — densest area covered first if we hit MAX_GRID_CELLS.
-  candidates.sort((a, b) => a.dist - b.dist);
-
-  return candidates
-    .slice(0, MAX_GRID_CELLS)
-    .map(({ center: c, subRadius: r }) => ({ center: c, subRadius: r }));
+  return cells;
 }
 
-/**
- * Fetches one sub-circle: calls searchNearby and follows nextPageToken until
- * the API has no more pages (max 20 per page).
- */
-async function fetchSubCircle(
-  center: PlaceLocation,
-  radiusMeters: number,
+/** Great-circle distance in metres between two coordinates. */
+function haversineMeters(a: PlaceLocation, b: PlaceLocation): number {
+  const R = 6371000;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLng = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+interface CellResult {
+  places: PlaceSummary[];
+  rawPlaces: RawPlace[];
+  /** True when the API returned the full page (20) — cell may be saturated. */
+  saturated: boolean;
+}
+
+/** Single searchNearby request for one cell, ranked by DISTANCE. */
+async function fetchCell(
+  cell: Cell,
   placeType: string,
   key: string,
-): Promise<{ places: PlaceSummary[]; rawPlaces: RawPlace[] }> {
-  const places: PlaceSummary[] = [];
-  const rawPlaces: RawPlace[] = [];
-  let pageToken: string | undefined;
+): Promise<CellResult> {
+  const body: Record<string, unknown> = {
+    locationRestriction: {
+      circle: {
+        center: { latitude: cell.center.latitude, longitude: cell.center.longitude },
+        radius: cell.radius,
+      },
+    },
+    ...(placeType === OTHER_PLACE_TYPE ? {} : { includedTypes: [placeType] }),
+    // DISTANCE ranking is what makes exhaustive coverage provable (see header).
+    rankPreference: "DISTANCE",
+    maxResultCount: PLACES_API_MAX_PER_PAGE,
+    languageCode: "es",
+  };
 
-  do {
-    // When sending a pageToken the body must contain ONLY the token —
-    // any other field causes an INVALID_ARGUMENT error from the API.
-    const body: Record<string, unknown> = pageToken
-      ? { pageToken }
-      : {
-          locationRestriction: {
-            circle: {
-              center: { latitude: center.latitude, longitude: center.longitude },
-              radius: radiusMeters,
-            },
-          },
-          ...(placeType === OTHER_PLACE_TYPE ? {} : { includedTypes: [placeType] }),
-          maxResultCount: PLACES_API_MAX_PER_PAGE,
-          languageCode: "es",
-        };
+  let response: Response;
+  try {
+    response = await fetch(`${PLACES_BASE}/places:searchNearby`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": NEARBY_FIELD_MASK,
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+  } catch (err) {
+    throw new PlacesApiError(
+      `Nearby search network error: ${err}`,
+      "NETWORK_ERROR",
+      "Error de conexión. Comprueba tu red e inténtalo de nuevo."
+    );
+  }
 
-    let response: Response;
-    try {
-      response = await fetch(`${PLACES_BASE}/places:searchNearby`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": key,
-          "X-Goog-FieldMask": NEARBY_FIELD_MASK,
-        },
-        body: JSON.stringify(body),
-        cache: "no-store",
-      });
-    } catch (err) {
-      throw new PlacesApiError(
-        `Nearby search network error: ${err}`,
-        "NETWORK_ERROR",
-        "Error de conexión. Comprueba tu red e inténtalo de nuevo."
-      );
-    }
+  if (!response.ok) await handlePlacesHttpError(response);
 
-    if (!response.ok) await handlePlacesHttpError(response);
+  const data = (await response.json()) as RawNearbySearchResponse;
+  const rawPage = data.places ?? [];
+  const valid = rawPage.filter((p) => p.id && p.location);
 
-    const data = (await response.json()) as RawNearbySearchResponse;
-    const rawPage = data.places ?? [];
+  return {
+    places: valid.map(toPlaceSummary),
+    rawPlaces: valid,
+    saturated: rawPage.length >= PLACES_API_MAX_PER_PAGE,
+  };
+}
 
-    const valid = rawPage.filter((p) => p.id && p.location);
-    places.push(...valid.map(toPlaceSummary));
-    rawPlaces.push(...valid);
-
-    pageToken = data.nextPageToken;
-    // Fewer results than the page cap → no more pages for this sub-circle
-    if (rawPage.length < PLACES_API_MAX_PER_PAGE) break;
-  } while (pageToken);
-
-  return { places, rawPlaces };
+/** Runs a batch of cells in concurrency-limited waves. */
+async function runCells(
+  cells: Cell[],
+  placeType: string,
+  key: string,
+  callBudget: number,
+  onResult: (cell: Cell, result: CellResult) => void,
+  onError: (err: unknown) => void,
+): Promise<number> {
+  let used = 0;
+  for (let start = 0; start < cells.length && used < callBudget; start += SEARCH_CONCURRENCY) {
+    const room = callBudget - used;
+    const wave = cells.slice(start, start + Math.min(SEARCH_CONCURRENCY, room));
+    used += wave.length;
+    const settled = await Promise.allSettled(
+      wave.map((cell) => fetchCell(cell, placeType, key))
+    );
+    settled.forEach((res, i) => {
+      if (res.status === "fulfilled") onResult(wave[i], res.value);
+      else onError(res.reason);
+    });
+  }
+  return used;
 }
 
 /**
- * Searches for ALL businesses near a location by tiling the area with
- * overlapping sub-circles (grid search). Each cell is queried in parallel
- * and paginates through its own pages. Results are deduplicated by placeId.
+ * Searches for ALL businesses of the given type within `radiusMeters` of
+ * `center`. Starts with the full circle and, using DISTANCE ranking, refines
+ * only the saturated sub-regions with a progressively finer global lattice
+ * until nothing is saturated (complete) or the min cell size / call ceiling is
+ * reached. Results are deduplicated by placeId and clipped to `radiusMeters`.
  *
- * @throws PlacesApiError on any failure (first cell error propagated if all fail)
+ * @throws PlacesApiError if the very first request fails (found nothing at all).
  */
 export async function searchNearby(
   center: PlaceLocation,
@@ -470,30 +503,63 @@ export async function searchNearby(
 ): Promise<NearbySearchResult> {
   const key = getKey();
   const cappedRadius = Math.min(radiusMeters, ANALYZER_CONFIG.maxRadiusMeters);
-  const grid = generateSearchGrid(center, cappedRadius);
 
-  // Fetch all sub-circles in parallel
-  const settled = await Promise.allSettled(
-    grid.map((cell) => fetchSubCircle(cell.center, cell.subRadius, placeType, key))
-  );
-
-  // Deduplicate across grid cells by placeId
   const seen = new Map<string, { place: PlaceSummary; raw: RawPlace }>();
-  for (const result of settled) {
-    if (result.status !== "fulfilled") continue;
-    const { places, rawPlaces } = result.value;
-    for (let i = 0; i < places.length; i++) {
-      const p = places[i];
-      if (!seen.has(p.placeId)) {
-        seen.set(p.placeId, { place: p, raw: rawPlaces[i] });
-      }
+  let firstError: unknown = null;
+  let apiCalls = 0;
+
+  let cells: Cell[] = [{ center, radius: cappedRadius }];
+  let radius = cappedRadius;
+
+  const collect = (_cell: Cell, result: CellResult) => {
+    const { places, rawPlaces } = result;
+    for (let j = 0; j < places.length; j++) {
+      const p = places[j];
+      // Clip to the requested circle — lattice cells extend slightly beyond it.
+      if (haversineMeters(center, p.location) > cappedRadius) continue;
+      if (!seen.has(p.placeId)) seen.set(p.placeId, { place: p, raw: rawPlaces[j] });
     }
+  };
+
+  while (cells.length > 0 && apiCalls < MAX_API_CALLS) {
+    const saturatedParents: Cell[] = [];
+    apiCalls += await runCells(
+      cells,
+      placeType,
+      key,
+      MAX_API_CALLS - apiCalls,
+      (cell, result) => {
+        collect(cell, result);
+        if (result.saturated) saturatedParents.push(cell);
+      },
+      (err) => {
+        firstError ??= err;
+      },
+    );
+
+    // No cell hit the 20-result cap → the whole area is exhaustively covered.
+    if (saturatedParents.length === 0) break;
+
+    const nextRadius = radius / 2;
+    if (nextRadius < MIN_CELL_RADIUS) break; // finest resolution reached
+
+    radius = nextRadius;
+    // Refine only where it was dense: keep lattice cells whose centre falls
+    // inside a saturated parent circle.
+    const candidate = latticeCells(center, cappedRadius, radius);
+    cells = candidate.filter((c) =>
+      saturatedParents.some((s) => haversineMeters(c.center, s.center) <= s.radius)
+    );
   }
 
-  // If every sub-circle failed, surface the first error
-  if (seen.size === 0) {
-    const firstRejected = settled.find((r) => r.status === "rejected");
-    if (firstRejected?.status === "rejected") throw firstRejected.reason;
+  // Only surface an error if we found nothing at all — partial failures in a
+  // few cells shouldn't discard everything else we successfully collected.
+  if (seen.size === 0 && firstError) throw firstError;
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      `[Rastreador] searchNearby: ${apiCalls} API calls, ${seen.size} businesses (radius ${cappedRadius}m)`
+    );
   }
 
   const entries = Array.from(seen.values());
