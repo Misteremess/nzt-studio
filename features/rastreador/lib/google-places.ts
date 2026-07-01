@@ -339,7 +339,7 @@ export interface NearbySearchResult {
  *   spacing     = subRadius × 1.7  (≈30 % overlap → no gaps)
  *   cells       ≤ MAX_GRID_CELLS   (sorted centre-out so densest area first)
  */
-const MAX_GRID_CELLS = 20;
+const MAX_GRID_CELLS = 30;
 
 function generateSearchGrid(
   center: PlaceLocation,
@@ -350,7 +350,9 @@ function generateSearchGrid(
   }
 
   const subRadius = Math.min(Math.ceil(radiusMeters / 2.5), 500);
-  const spacing = Math.ceil(subRadius * 1.7);
+  // Cap spacing at R/2 so the second ring of cells always fits inside the
+  // main circle. Without this cap, small radii only produce one ring (9 cells).
+  const spacing = Math.min(Math.ceil(subRadius * 1.5), Math.ceil(radiusMeters / 2));
 
   const latPerMeter = 1 / 111320;
   const lngPerMeter = 1 / (111320 * Math.cos((center.latitude * Math.PI) / 180));
