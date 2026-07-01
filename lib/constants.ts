@@ -15,6 +15,7 @@ export const ROUTES = {
   mvpFactory: "/mvp-factory",
   pricingStudio: "/pricing-studio",
   proposalBuilder: "/proposal-builder",
+  presupuestos: "/presupuestos",
   deliveryWorkspace: "/delivery-workspace",
   knowledgeBase: "/knowledge-base",
 } as const;

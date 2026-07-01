@@ -17,7 +17,8 @@ export type AiModuleId =
   | "competitor-radar"
   | "call-prep"
   | "content-seo"
-  | "transcript-analyzer";
+  | "transcript-analyzer"
+  | "presupuestos";
 
 export const AI_PROVIDERS: AiProvider[] = ["anthropic", "gemini"];
 
@@ -116,6 +117,11 @@ export const AI_MODULES: AiModuleMeta[] = [
     id: "transcript-analyzer",
     label: "Transcript Analyzer",
     description: "Analiza transcripciones de llamadas y reuniones.",
+  },
+  {
+    id: "presupuestos",
+    label: "Presupuestos",
+    description: "Redacta partidas y condiciones de presupuestos profesionales en PDF.",
   },
 ];
 

@@ -9,20 +9,20 @@ datasource db {
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum CompanyStatus {
-  PROSPECT      // Identificada, no analizada
-  ACTIVE        // En análisis o seguimiento activo
+  PROSPECT // Identificada, no analizada
+  ACTIVE // En análisis o seguimiento activo
   PROPOSAL_SENT // Propuesta enviada
-  CLIENT        // Cliente firmado
-  INACTIVE      // Sin actividad
+  CLIENT // Cliente firmado
+  INACTIVE // Sin actividad
 }
 
 enum OpportunityStatus {
-  DETECTED   // Detectada desde análisis
-  VALIDATED  // Confirmada como oportunidad real
-  PROPOSED   // Incluida en propuesta
-  ACCEPTED   // Cliente aceptó
-  REJECTED   // Cliente rechazó
-  CLOSED     // Cerrada por otro motivo
+  DETECTED // Detectada desde análisis
+  VALIDATED // Confirmada como oportunidad real
+  PROPOSED // Incluida en propuesta
+  ACCEPTED // Cliente aceptó
+  REJECTED // Cliente rechazó
+  CLOSED // Cerrada por otro motivo
 }
 
 enum ProposalStatus {
@@ -75,44 +75,44 @@ enum AiRunType {
 }
 
 enum KnowledgeItemType {
-  TEMPLATE    // Plantillas de documentos
-  PROMPT      // Referencias de prompts
-  GUIDE       // Guías internas
-  REFERENCE   // Referencias externas
-  CASE_STUDY  // Casos de uso
-  SNIPPET     // Fragmentos de código o contenido
+  TEMPLATE // Plantillas de documentos
+  PROMPT // Referencias de prompts
+  GUIDE // Guías internas
+  REFERENCE // Referencias externas
+  CASE_STUDY // Casos de uso
+  SNIPPET // Fragmentos de código o contenido
 }
 
 // Estado de entrega de un MVP vendido (Delivery Workspace).
 enum DeliveryStatus {
-  QUEUED       // En cola — decidido construir, aún sin empezar
-  IN_PROGRESS  // En construcción
-  IN_REVIEW    // En revisión / QA con el cliente
-  DELIVERED    // Entregado
-  ON_HOLD      // En pausa
-  CANCELLED    // Cancelado
+  QUEUED // En cola — decidido construir, aún sin empezar
+  IN_PROGRESS // En construcción
+  IN_REVIEW // En revisión / QA con el cliente
+  DELIVERED // Entregado
+  ON_HOLD // En pausa
+  CANCELLED // Cancelado
 }
 
 // Tipo de reunión propuesta en un correo generado (Email Generator).
 enum EmailMeetingType {
-  NONE       // No se propone ninguna reunión
-  CALL       // Llamada telefónica
+  NONE // No se propone ninguna reunión
+  CALL // Llamada telefónica
   VIDEO_CALL // Videollamada (Teams)
-  IN_PERSON  // Reunión presencial
+  IN_PERSON // Reunión presencial
 }
 
 // Canal por el que opera un agente de IA propio (AI Agents).
 enum AiAgentChannel {
   WHATSAPP // WhatsApp Business
-  EMAIL    // Correo
-  PHONE    // Llamadas (ElevenLabs)
+  EMAIL // Correo
+  PHONE // Llamadas (ElevenLabs)
 }
 
 // Estado operativo de un agente de IA propio (AI Agents).
 enum AiAgentStatus {
   ACTIVE // En producción, atendiendo
   PAUSED // Desactivado temporalmente
-  DRAFT  // En configuración / pruebas
+  DRAFT // En configuración / pruebas
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -151,28 +151,29 @@ model SystemHealthCheck {
 // ─── Core domain ──────────────────────────────────────────────────────────────
 
 model Company {
-  id       String        @id @default(cuid())
-  name     String
-  sector   String?
-  city     String?
-  website  String?
-  phone    String? // PII — mantener opcional, no añadir más datos personales
-  email    String? // PII — mantener opcional
-  mapsUrl  String?
-  notes    String?
-  status   CompanyStatus @default(PROSPECT)
+  id      String        @id @default(cuid())
+  name    String
+  sector  String?
+  city    String?
+  website String?
+  phone   String? // PII — mantener opcional, no añadir más datos personales
+  email   String? // PII — mantener opcional
+  mapsUrl String?
+  notes   String?
+  status  CompanyStatus @default(PROSPECT)
 
   // ── Seguimiento comercial (pipeline) ──────────────────────────────────────
   lastContactAt DateTime? // Último contacto comercial registrado manualmente
-  nextAction    String?   // Próxima acción de venta planificada (texto libre)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  nextAction    String? // Próxima acción de venta planificada (texto libre)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   analyses      Analysis[]
   opportunities Opportunity[]
   proposals     Proposal[]
   projects      Project[]
-  placeCache    PlaceCache?   // Populated if this Company was discovered via the Analyzer
+  budgets       Budget[] // Presupuestos emitidos a esta empresa
+  placeCache    PlaceCache? // Populated if this Company was discovered via the Analyzer
 
   @@map("companies")
 }
@@ -223,8 +224,8 @@ model Opportunity {
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
-  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  analysis  Analysis? @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  analysis  Analysis?  @relation(fields: [analysisId], references: [id], onDelete: SetNull)
   mvpSpecs  MvpSpec[]
   proposals Proposal[]
 
@@ -366,7 +367,7 @@ model PlaceCache {
   id String @id @default(cuid())
 
   // ── Identificador de fuente ────────────────────────────────────────────────
-  placeId String @unique          // Google Places ID. Inmutable para un lugar dado.
+  placeId String @unique // Google Places ID. Inmutable para un lugar dado.
   source  String @default("google_places")
 
   // ── Datos de búsqueda (disponibles desde Nearby Search) ───────────────────
@@ -374,11 +375,11 @@ model PlaceCache {
   formattedAddress String?
   latitude         Float
   longitude        Float
-  types            String[]  // ["dentist", "health", "point_of_interest", ...]
-  primaryType      String?   // Tipo principal del negocio
-  businessStatus   String?   // "OPERATIONAL" | "CLOSED_TEMPORARILY" | "CLOSED_PERMANENTLY"
-  rating           Float?    // 1.0–5.0
-  userRatingCount  Int?      // Número total de reseñas
+  types            String[] // ["dentist", "health", "point_of_interest", ...]
+  primaryType      String? // Tipo principal del negocio
+  businessStatus   String? // "OPERATIONAL" | "CLOSED_TEMPORARILY" | "CLOSED_PERMANENTLY"
+  rating           Float? // 1.0–5.0
+  userRatingCount  Int? // Número total de reseñas
 
   // ── Datos de detalle (Place Details, cargados bajo demanda) ───────────────
   websiteUri               String?
@@ -393,7 +394,7 @@ model PlaceCache {
   opportunities Json? // DetectedOpportunity[] — calculado al cargar detalle
 
   // ── Auditoría web (fetch directo a la web del negocio, sin APIs) ──────────
-  webAudit          Json?     // WebAuditResult — calculado bajo demanda si hay websiteUri
+  webAudit          Json? // WebAuditResult — calculado bajo demanda si hay websiteUri
   webAuditFetchedAt DateTime? // Cuándo se ejecutó la auditoría (null = nunca)
 
   // ── Respuestas crudas de la API ────────────────────────────────────────────
@@ -402,7 +403,7 @@ model PlaceCache {
 
   // ── Control de cache ───────────────────────────────────────────────────────
   searchFetchedAt DateTime  @default(now()) // Cuándo se guardó el resultado de búsqueda
-  detailFetchedAt DateTime?                 // Cuándo se cargó el detalle (null = no cargado aún)
+  detailFetchedAt DateTime? // Cuándo se cargó el detalle (null = no cargado aún)
 
   // ── Vínculo con CRM (opcional) ────────────────────────────────────────────
   // Null mientras no se guarde como Company candidata.
@@ -430,13 +431,13 @@ model BusinessAnalysis {
 
   // ── Contexto del negocio en el momento del análisis ───────────────────────
   businessName String
-  model        String  // Modelo de IA usado, e.g. "claude-opus-4-7"
+  model        String // Modelo de IA usado, e.g. "claude-opus-4-7"
 
   // ── Salida del análisis ───────────────────────────────────────────────────
-  summary     String   // Resumen ejecutivo del negocio
-  assets      Json     // string[] — "lo que el negocio ya tiene"
-  webFindings Json     // { text, sources: {title,url}[] } — investigación en internet
-  rawOutput   Json?    // Respuesta cruda de la API para depuración
+  summary     String // Resumen ejecutivo del negocio
+  assets      Json // string[] — "lo que el negocio ya tiene"
+  webFindings Json // { text, sources: {title,url}[] } — investigación en internet
+  rawOutput   Json? // Respuesta cruda de la API para depuración
 
   archivedAt DateTime? // Null = activo; not-null = archivado (soft-delete)
 
@@ -457,10 +458,10 @@ model BrandIdentity {
   id         String @id @default(cuid())
   analysisId String @unique
 
-  source    String  // "website" | "logo" | "manual" — origen de la identidad
+  source    String // "website" | "logo" | "manual" — origen de la identidad
   sourceUrl String? // URL de la web usada para extraer (si source="website")
 
-  colors      Json    // { role: string; hex: string; label?: string }[]
+  colors      Json // { role: string; hex: string; label?: string }[]
   fontHeading String? // Nombre de Google Font para títulos
   fontBody    String? // Nombre de Google Font para cuerpo de texto
   styleNotes  String? @db.Text // Tono/personalidad de marca, en texto libre
@@ -487,8 +488,8 @@ model AiOpportunity {
   analysisId String
 
   title       String
-  description String  // Qué es la oportunidad
-  development String  // "Qué podríamos hacer" — desarrollo concreto
+  description String // Qué es la oportunidad
+  development String // "Qué podríamos hacer" — desarrollo concreto
   impact      String? // "low" | "medium" | "high"
   effort      String? // "low" | "medium" | "high"
   selected    Boolean @default(false) // Marcada para pasar al MVP Factory
@@ -533,10 +534,10 @@ model AiMvpSpec {
   updatedAt DateTime @updatedAt
 
   opportunity AiOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  pricing     AiPricing?    // Pricing Studio output (1:1)
-  proposal    AiProposal?   // Proposal Builder output (1:1)
-  delivery    AiDelivery?   // Delivery Workspace tracking (1:1)
-  images      AiMvpImage[]  // Mockups de diseño generados por IA (hero/features/detail)
+  pricing     AiPricing? // Pricing Studio output (1:1)
+  proposal    AiProposal? // Proposal Builder output (1:1)
+  delivery    AiDelivery? // Delivery Workspace tracking (1:1)
+  images      AiMvpImage[] // Mockups de diseño generados por IA (hero/features/detail)
 
   @@map("ai_mvp_specs")
 }
@@ -571,16 +572,16 @@ model AiPricing {
   model    String // Modelo de IA usado, e.g. "claude-opus-4-7"
   currency String @default("EUR")
 
-  setupPrice   Int  // Precio único de construcción del MVP (EUR)
+  setupPrice   Int // Precio único de construcción del MVP (EUR)
   monthlyPrice Int? // Cuota mensual de mantenimiento/hosting (EUR), si aplica
 
-  tiers           Json    // { name, price, billing, description, features[] }[]
+  tiers           Json // { name, price, billing, description, features[] }[]
   recommendedTier String? // Nombre del plan recomendado
-  paymentTerms    String  // Condiciones de pago (e.g. "50% al inicio, 50% a la entrega")
-  rationale       String  // Justificación del precio
-  assumptions     Json    // string[] — supuestos sobre los que se basa el precio
-  saasModel       Json?   // Perspectiva de suscripción mensual (SaaS): { monthlyPrice, annualPrice, setupFee, minimumTermMonths, includedServices[], breakEvenMonths, rationale }
-  rawOutput       Json?   // Respuesta cruda de la API para depuración
+  paymentTerms    String // Condiciones de pago (e.g. "50% al inicio, 50% a la entrega")
+  rationale       String // Justificación del precio
+  assumptions     Json // string[] — supuestos sobre los que se basa el precio
+  saasModel       Json? // Perspectiva de suscripción mensual (SaaS): { monthlyPrice, annualPrice, setupFee, minimumTermMonths, includedServices[], breakEvenMonths, rationale }
+  rawOutput       Json? // Respuesta cruda de la API para depuración
 
   archivedAt DateTime? // Null = activo; not-null = archivado (soft-delete)
 
@@ -615,14 +616,14 @@ model AiProposal {
 
   investment   String // Resumen de inversión (texto, integra el pricing)
   callToAction String // Cierre / llamada a la acción
-  rawOutput    Json?  // Respuesta cruda de la API para depuración
+  rawOutput    Json? // Respuesta cruda de la API para depuración
 
   archivedAt DateTime? // Null = activo; not-null = archivado (soft-delete)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  mvpSpec AiMvpSpec @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
+  mvpSpec    AiMvpSpec     @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
   callScript AiCallScript?
 
   @@map("ai_proposals")
@@ -646,7 +647,7 @@ model AiDelivery {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  mvpSpec AiMvpSpec         @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
+  mvpSpec AiMvpSpec        @relation(fields: [mvpSpecId], references: [id], onDelete: Cascade)
   tasks   AiDeliveryTask[]
 
   @@map("ai_deliveries")
@@ -713,8 +714,8 @@ model AiAgent {
 
   name        String
   channel     AiAgentChannel
-  status      AiAgentStatus @default(ACTIVE)
-  description String?       @db.Text // Para qué sirve / qué hace este agente
+  status      AiAgentStatus  @default(ACTIVE)
+  description String?        @db.Text // Para qué sirve / qué hace este agente
 
   clientName String? // Cliente/negocio al que pertenece (vacío si es interno de NZT)
 
@@ -732,6 +733,60 @@ model AiAgent {
 }
 
 // ─── App settings (key-value) ─────────────────────────────────────────────────
+// ─── Presupuestos (Budgets) ──────────────────────────────────────────────────
+// Presupuestos profesionales de Hyperfocus generados con IA y exportables a PDF.
+// El emisor (datos fiscales) se guarda en AppSetting bajo "presupuestos.issuer".
+
+enum BudgetStatus {
+  DRAFT // Borrador, aún no enviado
+  SENT // Enviado al cliente
+  ACCEPTED // Aceptado por el cliente
+  REJECTED // Rechazado
+}
+
+model Budget {
+  id     String @id @default(cuid())
+  number String @unique // Nº de presupuesto legible, p.ej. "PRES-2026-0001"
+  year   Int // Año de emisión (para la numeración secuencial)
+  seq    Int // Secuencia dentro del año
+
+  // ── Cliente (destinatario) ────────────────────────────────────────────────
+  clientName    String
+  clientTaxId   String? // NIF/CIF del cliente
+  clientAddress String?
+  clientEmail   String?
+  clientPhone   String?
+  companyId     String? // Enlace opcional a una empresa del CRM
+  company       Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  // ── Contenido ─────────────────────────────────────────────────────────────
+  title        String
+  intro        String? // Párrafo introductorio (opcional, generado por IA)
+  items        Json // BudgetItem[]: { concept, description, quantity, unitPrice }
+  notes        String?
+  paymentTerms String?
+  validityDays Int     @default(30)
+
+  // ── Importes ──────────────────────────────────────────────────────────────
+  taxRate      Float @default(21) // % de IVA aplicado
+  discountRate Float @default(0) // % de descuento sobre la base
+
+  // ── Firmantes ─────────────────────────────────────────────────────────────
+  signedByMaximo  Boolean @default(false)
+  signedByIgnacio Boolean @default(false)
+
+  status  BudgetStatus @default(DRAFT)
+  aiModel String? // Modelo de IA que generó el borrador (si aplica)
+  aiRaw   Json? // Respuesta cruda de la IA (auditoría)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, seq])
+  @@index([companyId])
+  @@map("budgets")
+}
+
 // Single-user app configuration. Used, among other things, to choose which AI
 // provider (anthropic | gemini) each module uses. Keys are namespaced, e.g.
 // "provider.mvp-factory".
